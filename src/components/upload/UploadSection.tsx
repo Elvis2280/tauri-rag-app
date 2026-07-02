@@ -4,6 +4,7 @@ import { Upload } from "lucide-react";
 import UploadAnimations from "./UploadAnimations";
 import { useFileContext } from "@/context/FileContext";
 import { nanoid } from "nanoid";
+import { cn } from "@/lib/utils";
 
 type acceptedFilesType = File[];
 
@@ -21,14 +22,17 @@ export default function UploadSection() {
     );
   }, []);
 
-  const { getRootProps, getInputProps } = useDropzone({
+  const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
   });
 
   return (
     <div className="h-screen flex justify-center items-center overflow-hidden relative">
       <div
-        className="h-1/2 w-1/2 flex flex-col justify-center items-center gap-4"
+        className={cn(
+          "h-1/2 w-1/2 flex flex-col justify-center items-center gap-4 rounded",
+          isDragActive && "bg-card",
+        )}
         {...getRootProps()}
       >
         <div className="text-input">
