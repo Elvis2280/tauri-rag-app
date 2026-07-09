@@ -1,18 +1,9 @@
-import { CurrentPageType } from "@/types/GlobalTypes";
 import { create } from "zustand";
 
-type GlobalStateType = {
-  currentPage: CurrentPageType;
-};
+type GlobalStateType = object;
 
-type GlobalActionType = {
-  setCurrentPage: (page: CurrentPageType) => void;
-};
+type GlobalActionType = object;
 
 export const useGlobalContext = create<GlobalStateType & GlobalActionType>()(
-  (set) => ({
-    currentPage: "upload",
-    setCurrentPage: (page: CurrentPageType) =>
-      set(() => ({ currentPage: page })),
-  }),
+  () => ({}),
 );

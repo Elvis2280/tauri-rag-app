@@ -9,6 +9,7 @@ type ActionsType = {
   updateStatus: (fileId: string, status: statusFileType) => void;
   removeFile: (fileId: string) => void;
   addFile: (file: FileUploadType) => void;
+  clearFiles: () => void;
 };
 
 export const useFileContext = create<StateType & ActionsType>()((set) => ({
@@ -25,4 +26,5 @@ export const useFileContext = create<StateType & ActionsType>()((set) => ({
     set((state) => ({
       files: state.files.filter((f) => f.id !== id),
     })),
+  clearFiles: () => set({ files: [] }),
 }));

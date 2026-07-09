@@ -1,13 +1,14 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
+import { QueryClientProvider } from "@tanstack/react-query";
+import { queryClient } from "@/lib/queryClient";
 import App from "@/App";
-import Layout from "./components/common/Layout";
 import "./App.css";
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>
-    <Layout>
+    <QueryClientProvider client={queryClient}>
       <App />
-    </Layout>
+    </QueryClientProvider>
   </React.StrictMode>,
 );
