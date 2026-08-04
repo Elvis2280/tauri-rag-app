@@ -13,6 +13,7 @@ import {
 export const workspaceTreeQueryKey = ["workspaces", "tree"] as const;
 
 async function fetchWorkspaceTree(): Promise<Workspace[]> {
+  console.log('hola')
   const res = await apiRag.get<ApiWorkspaceTreeResponse>(
     WORKSPACE_ENDPOINTS.tree,
   );
@@ -47,6 +48,8 @@ export default function useWorkspaceTree(): UseWorkspaceTreeResult {
   const error = query.error
     ? extractApiErrorMessage(query.error, "Failed to load workspace tree")
     : null;
+
+  console.log(query.data)
 
   return {
     data: query.data ?? null,

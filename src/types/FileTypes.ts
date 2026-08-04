@@ -30,6 +30,11 @@ export type HistoryEntry = {
   message: string;
   status: statusFileType;
   timestamp: string;
+  step: string | null;
+  stage: string | null;
+  pageNumber: number | null;
+  totalPages: number | null;
+  error: string | null;
 };
 
 export type FileUploadType = {

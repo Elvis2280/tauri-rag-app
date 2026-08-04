@@ -4,6 +4,7 @@ import { Button } from "../ui/button";
 import { CurrentPageType } from "@/types/GlobalTypes";
 import { useLocation, useNavigate, Outlet } from "react-router";
 import { Toaster } from "@/components/ui/sonner";
+import { useHistoryWebsocket } from "@/hooks/useHistoryWebsocket";
 import { useMemo } from "react";
 
 type navItemType = {
@@ -28,6 +29,7 @@ const pathToPage: Record<string, CurrentPageType> = {
 };
 
 export default function Layout() {
+  useHistoryWebsocket();
   const navigate = useNavigate();
   const currentSelectedPage = pathToPage[useLocation().pathname] ?? "upload";
 

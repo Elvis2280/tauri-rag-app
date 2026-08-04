@@ -1,45 +1,27 @@
-export type WorkspaceStatus = "active" | "disabled";
-
-export type WorkspaceFileNode = {
-  type: "file";
-  id: string;
-  name: string;
-};
-
-export type WorkspaceFolderNode = {
-  type: "folder";
-  id: string;
-  name: string;
-  path: string;
-  children: WorkspaceNode[];
-};
-
-export type WorkspaceNode = WorkspaceFileNode | WorkspaceFolderNode;
-
-export type Workspace = {
-  type: "workspace";
-  id: string;
-  name: string;
-  status: WorkspaceStatus;
-  children: WorkspaceNode[];
-};
-
-export type WorkspaceTreeItem = Workspace | WorkspaceNode;
-
-export type WorkspaceTreeResponse = {
-  workspaces: Workspace[];
-};
-
 export type ApiFileNode = {
   type: "file";
   id: string;
   name: string;
+  original_name: string | null;
+  document_id: string | null;
+  kind: string | null;
+  language: string | null;
+  page_number: number | null;
+  mime_type: string | null;
+  created_at: string | null;
 };
 
 export type ApiFolderNode = {
   type: "folder";
+  id: string;
   name: string;
-  path: string;
+  path: string | null;
+  original_name: string | null;
+  status: string | null;
+  language: string | null;
+  mime_type: string | null;
+  page_count: number | null;
+  created_at: string | null;
   children: ApiTreeNode[];
 };
 
@@ -56,29 +38,89 @@ export type ApiWorkspaceTreeResponse = {
   workspaces: ApiWorkspaceTreeNode[];
 };
 
-function synthesizeFolderId(workspaceId: string, folder: ApiFolderNode): string {
-  return `${workspaceId}::${folder.path}`;
+export type WorkspaceFileNode = {
+  type: "file";
+  id: string;
+  name: string;
+  originalName: string | null;
+  documentId: string | null;
+  kind: string | null;
+  language: string | null;
+  pageNumber: number | null;
+  mimeType: string | null;
+  createdAt: string | null;
+};
+
+export type WorkspaceFolderNode = {
+  type: "folder";
+  id: string;
+  name: string;
+  path: string | null;
+  originalName: string | null;
+  status: string | null;
+  language: string | null;
+  mimeType: string | null;
+  pageCount: number | null;
+  createdAt: string | null;
+  children: WorkspaceNode[];
+};
+
+export type WorkspaceNode = WorkspaceFileNode | WorkspaceFolderNode;
+
+export type Workspace = {
+  type: "workspace";
+  id: string;
+  name: string;
+  status: string;
+  children: WorkspaceFolderNode[];
+};
+
+export type WorkspaceTreeItem = Workspace | WorkspaceNode;
+
+export type WorkspaceTreeResponse = {
+  workspaces: Workspace[];
+};
+
+function mapFileNode(apiFile: ApiFileNode): WorkspaceFileNode {
+  return {
+    type: "file",
+    id: apiFile.id,
+    name: apiFile.name,
+    originalName: apiFile.original_name,
+    documentId: apiFile.document_id,
+    kind: apiFile.kind,
+    language: apiFile.language,
+    pageNumber: apiFile.page_number,
+    mimeType: apiFile.mime_type,
+    createdAt: apiFile.created_at,
+  };
 }
 
 function mapFolderNode(
-  workspaceId: string,
   folder: ApiFolderNode,
 ): WorkspaceFolderNode {
+  const children: WorkspaceNode[] = [];
+  for (const child of folder.children) {
+    if (child.type === "file") {
+      children.push(mapFileNode(child));
+    } else if (child.type === "folder") {
+      children.push(mapFolderNode(child));
+    } else {
+      console.warn("WorkspaceTypes.mapFolderNode: skipping unknown child type", child);
+    }
+  }
   return {
     type: "folder",
-    id: synthesizeFolderId(workspaceId, folder),
+    id: folder.id,
     name: folder.name,
     path: folder.path,
-    children: folder.children.map((child) => {
-      if (child.type === "file") {
-        return {
-          type: "file",
-          id: child.id,
-          name: child.name,
-        };
-      }
-      return mapFolderNode(workspaceId, child);
-    }),
+    originalName: folder.original_name,
+    status: folder.status,
+    language: folder.language,
+    mimeType: folder.mime_type,
+    pageCount: folder.page_count,
+    createdAt: folder.created_at,
+    children,
   };
 }
 
@@ -87,11 +129,8 @@ function mapWorkspace(apiWs: ApiWorkspaceTreeNode): Workspace {
     type: "workspace",
     id: apiWs.id,
     name: apiWs.name,
-    status:
-      apiWs.status === "active" || apiWs.status === "disabled"
-        ? apiWs.status
-        : "active",
-    children: apiWs.children.map((folder) => mapFolderNode(apiWs.id, folder)),
+    status: apiWs.status,
+    children: apiWs.children.map(mapFolderNode),
   };
 }
 

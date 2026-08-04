@@ -1,9 +1,7 @@
 import { useHistory } from "@/context/HistoryContext";
-import { useHistoryWebsocket } from "@/hooks/useHistoryWebsocket";
 import FileStatusItem from "./FileStatusItem";
 
 export default function HistorySection() {
-  useHistoryWebsocket();
   const entries = useHistory((s) => s.entries);
 
   return (

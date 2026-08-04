@@ -48,7 +48,10 @@ type DirectoryViewerProps = {
 export default function DirectoryViewer({ workspaces }: DirectoryViewerProps) {
   const handleActivate = (node: NodeApi<WorkspaceTreeItem>) => {
     if (node.data.type === "file") {
-      console.log("open file", { id: node.data.id, name: node.data.name });
+      console.log(`open ${node.data.type}`, {
+        id: node.data.id,
+        name: node.data.name,
+      });
       return;
     }
     node.toggle();
