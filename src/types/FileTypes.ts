@@ -27,7 +27,7 @@ export type WebSocketProgressMessage = {
 
 export type HistoryEntry = {
   file_id: string;
-  message: string;
+  message: string | null;
   status: statusFileType;
   timestamp: string;
   step: string | null;

@@ -1,3 +1,4 @@
+/// <reference types="vitest/config" />
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
@@ -14,6 +15,13 @@ export default defineConfig(async () => ({
     alias: {
       "@": path.resolve(import.meta.dirname, "./src"),
     },
+  },
+
+  test: {
+    environment: "happy-dom",
+    globals: true,
+    include: ["src/test/**/*.{test,spec}.{ts,tsx}"],
+    setupFiles: ["src/test/setup.ts"],
   },
 
   // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`

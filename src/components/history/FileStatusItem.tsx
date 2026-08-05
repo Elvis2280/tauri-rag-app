@@ -11,6 +11,12 @@ function getStatusColor(status: statusFileType): string {
   return "bg-yellow-500";
 }
 
+function getCardTint(status: statusFileType): string {
+  if (status === FILE_STATUS.COMPLETED) return "bg-success/15";
+  if (status === FILE_STATUS.FAILED) return "bg-destructive/15";
+  return "";
+}
+
 export default function FileStatusItem({
   file_id,
   message,
@@ -20,21 +26,23 @@ export default function FileStatusItem({
   pageNumber,
   totalPages,
 }: FileStatusItemProps) {
-  const subtitle = [
-    step || stage ? [step, stage].filter(Boolean).join(" · ") : null,
+  const stepStage =
+    step || stage ? [step, stage].filter(Boolean).join(" · ") : null;
+  const messagePart = message != null ? message : null;
+  const pagePart =
     pageNumber != null && totalPages != null
       ? `page ${pageNumber} / ${totalPages}`
-      : null,
-  ]
+      : null;
+  const subtitle = [stepStage, messagePart, pagePart]
     .filter(Boolean)
     .join(" · ");
 
   return (
-    <Item variant="outline" size="sm">
+    <Item variant="outline" size="sm" className={getCardTint(status)}>
       <ItemContent>
         <ItemTitle title={file_id}>{file_id}</ItemTitle>
         <p className="text-xs text-muted-foreground truncate">
-          {subtitle || message || status}
+          {subtitle || status}
         </p>
       </ItemContent>
       <ItemActions>

@@ -9,7 +9,7 @@ export default function HistorySection() {
       <h1 className="text-3xl font-bold mb-2">File Upload History & Status</h1>
       {entries.map((entry) => (
         <FileStatusItem key={entry.file_id} {...entry} />
-      ))}
+        )).reverse()}
     </div>
   );
 }

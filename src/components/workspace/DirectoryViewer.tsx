@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { Tree, type NodeApi } from "react-arborist";
 import { Folder, FolderOpen, FolderTree, StickyNote } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -46,6 +47,18 @@ type DirectoryViewerProps = {
 };
 
 export default function DirectoryViewer({ workspaces }: DirectoryViewerProps) {
+  const [windowHeight, setWindowHeight] = useState<number>(() =>
+    window.innerHeight,
+  );
+
+  useEffect(() => {
+    const handleResize = () => setWindowHeight(window.innerHeight);
+    window.addEventListener("resize", handleResize);
+    return () => {
+      window.removeEventListener("resize", handleResize);
+    };
+  }, []);
+
   const handleActivate = (node: NodeApi<WorkspaceTreeItem>) => {
     if (node.data.type === "file") {
       console.log(`open ${node.data.type}`, {
@@ -65,12 +78,12 @@ export default function DirectoryViewer({ workspaces }: DirectoryViewerProps) {
   };
 
   return (
-    <div className="relative w-full h-full max-h-[calc(100vh-2rem)] p-2">
+    <div className="relative w-full h-screen p-2">
       <Tree<WorkspaceTreeItem>
         data={workspaces as WorkspaceTreeItem[]}
         openByDefault={false}
         width="100%"
-        height={600}
+        height={windowHeight}
         indent={20}
         rowHeight={28}
         padding={8}
