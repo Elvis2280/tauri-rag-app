@@ -3,16 +3,18 @@ import { Send } from "lucide-react";
 import { Button } from "../ui/button";
 
 type MessageBarProps = {
-  onSend: (content: string) => void;
+  onSend: (content: string, id: string) => void;
+  isDisabled: boolean;
 };
 
-export default function MessageBar({ onSend }: MessageBarProps) {
+export default function MessageBar({ onSend, isDisabled }: MessageBarProps) {
   const [value, setValue] = useState<string>("");
   const canSend = value.trim().length > 0;
 
   const handleSend = () => {
+    const id = crypto.randomUUID()
     if (!canSend) return;
-    onSend(value.trim());
+    onSend(value.trim(), id);
     setValue("");
   };
 
@@ -33,15 +35,17 @@ export default function MessageBar({ onSend }: MessageBarProps) {
               value={value}
               onChange={(e) => setValue(e.target.value)}
               onKeyDown={handleKeyDown}
-              aria-label="Message"
+            aria-label="Message"
+            disabled={isDisabled}
             />
             <Button
               variant="default"
               size="icon-lg"
               className="rounded-full"
               onClick={handleSend}
-              disabled={!canSend}
-              aria-label="Send message"
+              disabled={!canSend || isDisabled}
+            aria-label="Send message"
+
             >
               <Send size={20} />
             </Button>

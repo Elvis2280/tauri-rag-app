@@ -10,7 +10,7 @@ describe("MessageBar", () => {
     const handleSend = vi.fn();
 
     // 2. ACT
-    render(<MessageBar onSend={handleSend} />);
+    render(<MessageBar onSend={handleSend} isDisabled={false} />);
 
     // 3. ASSERT
     expect(
@@ -23,7 +23,7 @@ describe("MessageBar", () => {
     const handleSend = vi.fn();
 
     // 2. ACT
-    render(<MessageBar onSend={handleSend} />);
+    render(<MessageBar onSend={handleSend} isDisabled={false} />);
     const sendButton = screen.getByRole("button", { name: /send message/i });
 
     // 3. ASSERT
@@ -35,7 +35,7 @@ describe("MessageBar", () => {
     const user = userEvent.setup();
     const handleSend = vi.fn();
     const question = faker.lorem.sentence();
-    render(<MessageBar onSend={handleSend} />);
+    render(<MessageBar onSend={handleSend} isDisabled={false} />);
     const textarea = screen.getByPlaceholderText(
       "Ask me and let me solve your questions",
     );
@@ -47,7 +47,7 @@ describe("MessageBar", () => {
 
     // 3. ASSERT
     expect(handleSend).toHaveBeenCalledTimes(1);
-    expect(handleSend).toHaveBeenCalledWith(question);
+    expect(handleSend).toHaveBeenCalledWith(question, expect.any(String));
     expect(textarea).toHaveValue("");
   });
 
@@ -55,7 +55,7 @@ describe("MessageBar", () => {
     // 1. ARRANGE
     const user = userEvent.setup();
     const handleSend = vi.fn();
-    render(<MessageBar onSend={handleSend} />);
+    render(<MessageBar onSend={handleSend} isDisabled={false} />);
 
     // 2. ACT
     const sendButton = screen.getByRole("button", { name: /send message/i });
@@ -70,7 +70,7 @@ describe("MessageBar", () => {
     const user = userEvent.setup();
     const handleSend = vi.fn();
     const question = faker.lorem.sentence();
-    render(<MessageBar onSend={handleSend} />);
+    render(<MessageBar onSend={handleSend} isDisabled={false} />);
     const textarea = screen.getByPlaceholderText(
       "Ask me and let me solve your questions",
     );
@@ -81,7 +81,7 @@ describe("MessageBar", () => {
 
     // 3. ASSERT
     expect(handleSend).toHaveBeenCalledTimes(1);
-    expect(handleSend).toHaveBeenCalledWith(question);
+    expect(handleSend).toHaveBeenCalledWith(question, expect.any(String));
 
     // 4. ACT
     await user.type(textarea, "line one");

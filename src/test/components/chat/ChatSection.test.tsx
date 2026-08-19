@@ -7,7 +7,7 @@ import { CHAT_ROLE } from "@/types/ChatTypes";
 
 describe("ChatSection", () => {
   beforeEach(() => {
-    useChatStore.setState({ messages: [] });
+    useChatStore.setState({ messages: {}, messageOrder: [] });
   });
 
   it("renders the RAG Chat title in the center when there are no messages", () => {
@@ -28,7 +28,10 @@ describe("ChatSection", () => {
       role: CHAT_ROLE.USER,
       content: "What is RAG?",
     });
-    useChatStore.setState({ messages: [userMessage] });
+    useChatStore.setState({
+      messages: { [userMessage.id]: userMessage },
+      messageOrder: [userMessage.id],
+    });
 
     // 2. ACT
     render(<ChatSection />);

@@ -39,7 +39,7 @@ export default function FileStatusItem({
 
   return (
     <Item variant="outline" size="sm" className={getCardTint(status)}>
-      <ItemContent>
+      <ItemContent className="cursor-default overflow-hidden">
         <ItemTitle title={file_id}>{file_id}</ItemTitle>
         <p className="text-xs text-muted-foreground truncate">
           {subtitle || status}

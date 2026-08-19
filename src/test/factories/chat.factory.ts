@@ -1,5 +1,5 @@
 import { faker } from "@faker-js/faker";
-import { CHAT_ROLE, type ChatMessage } from "@/types/ChatTypes";
+import { CHAT_ROLE, CHAT_STATUS, type ChatMessage } from "@/types/ChatTypes";
 
 export const buildChatMessage = (
   overrides?: Partial<ChatMessage>,
@@ -8,5 +8,6 @@ export const buildChatMessage = (
   role: CHAT_ROLE.USER,
   content: faker.lorem.sentence(),
   createdAt: faker.date.recent().toISOString(),
+  status: CHAT_STATUS.COMPLETED,
   ...overrides,
 });
