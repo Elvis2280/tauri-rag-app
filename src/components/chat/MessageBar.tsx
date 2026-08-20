@@ -1,9 +1,10 @@
 import { useState } from "react";
-import { Send } from "lucide-react";
+import { Send  } from "lucide-react";
 import { Button } from "../ui/button";
 
+
 type MessageBarProps = {
-  onSend: (content: string, id: string) => void;
+  onSend: (content: string) => void;
   isDisabled: boolean;
 };
 
@@ -12,9 +13,8 @@ export default function MessageBar({ onSend, isDisabled }: MessageBarProps) {
   const canSend = value.trim().length > 0;
 
   const handleSend = () => {
-    const id = crypto.randomUUID()
     if (!canSend) return;
-    onSend(value.trim(), id);
+    onSend(value.trim());
     setValue("");
   };
 
@@ -26,7 +26,7 @@ export default function MessageBar({ onSend, isDisabled }: MessageBarProps) {
   };
 
   return (
-    <div className="flex justify-center mb-6">
+    <div className="flex justify-center mb-6 pt-2">
         <div className="w-[80%] flex min-h-24 flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
           <div className="flex-1 overflow-hidden px-5 py-4 flex items-center gap-4">
             <textarea

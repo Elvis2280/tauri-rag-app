@@ -7,7 +7,8 @@ import { Upload } from "lucide-react";
 import { useFileContext } from "@/context/FileContext";
 import { FILE_STATUS } from "@/types/FileTypes";
 import useFileUpload from "@/hooks/useFileUpload";
-import useWorkspaceTree from "@/hooks/useWorkspaceTree";
+import useWorkspaceList from "@/hooks/useWorkspaceList";
+import { useGlobalContext } from "@/context/GlobalContext";
 import { nanoid } from "nanoid";
 import { cn } from "@/lib/utils";
 import UploadModal from "./UploadModal";
@@ -29,11 +30,9 @@ export default function UploadSection() {
   const fileList = useFileContext((state) => state.files);
 
   const { uploadFiles } = useFileUpload();
-  const {
-    data: workspaces,
-    loading: workspacesLoading,
-    error: workspacesError,
-  } = useWorkspaceTree();
+  const { loading: workspacesLoading, error: workspacesError } =
+    useWorkspaceList({ showErrorToast: false });
+  const workspaces = useGlobalContext((state) => state.workspaces);
 
   const workspaceOptions = useMemo(
     () => (workspaces ?? []).map((w) => ({ id: w.id, name: w.name })),

@@ -47,7 +47,7 @@ describe("MessageBar", () => {
 
     // 3. ASSERT
     expect(handleSend).toHaveBeenCalledTimes(1);
-    expect(handleSend).toHaveBeenCalledWith(question, expect.any(String));
+    expect(handleSend).toHaveBeenCalledWith(question);
     expect(textarea).toHaveValue("");
   });
 
@@ -81,7 +81,7 @@ describe("MessageBar", () => {
 
     // 3. ASSERT
     expect(handleSend).toHaveBeenCalledTimes(1);
-    expect(handleSend).toHaveBeenCalledWith(question, expect.any(String));
+    expect(handleSend).toHaveBeenCalledWith(question);
 
     // 4. ACT
     await user.type(textarea, "line one");

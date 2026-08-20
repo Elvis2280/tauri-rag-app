@@ -6,6 +6,7 @@ import { useLocation, useNavigate, Outlet } from "react-router";
 import { Toaster } from "@/components/ui/sonner";
 import { useHistoryWebsocket } from "@/hooks/useHistoryWebsocket";
 import { useMemo } from "react";
+import { TooltipProvider } from "../ui/tooltip";
 
 type navItemType = {
   path: string;
@@ -55,7 +56,9 @@ export default function Layout() {
 
       {/* Main Content Window */}
       <main className="flex-1 h-full overflow-auto">
-        <Outlet />
+        <TooltipProvider>
+          <Outlet />
+        </TooltipProvider>
       </main>
       <Toaster />
     </div>

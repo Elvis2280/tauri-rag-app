@@ -38,6 +38,19 @@ export type ApiWorkspaceTreeResponse = {
   workspaces: ApiWorkspaceTreeNode[];
 };
 
+export type WorkspaceListItem = {
+  id: string;
+  name: string;
+  slug: string;
+  storage_key: string;
+  status: string;
+  created_at: string;
+  updated_at: string;
+  deleted_at: string | null;
+};
+
+export type ApiWorkspaceListResponse = WorkspaceListItem[];
+
 export type WorkspaceFileNode = {
   type: "file";
   id: string;

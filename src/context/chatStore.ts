@@ -1,6 +1,10 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import { CHAT_STATUS, type ChatMessage } from "@/types/ChatTypes";
+import {
+  CHAT_STATUS,
+  type ChatMessage,
+  type ChatStatus,
+} from "@/types/ChatTypes";
 
 type State = {
   messages: Record<string, ChatMessage>;
@@ -11,6 +15,7 @@ type Actions = {
   addMessage: (
     message: Omit<ChatMessage, "id" | "createdAt" | "status">,
     id: string,
+    status?: ChatStatus,
   ) => void;
   updateMessage: (
     id: string,
@@ -26,7 +31,7 @@ export const useChatStore = create<State & Actions>()(
       messages: {},
       messageOrder: [],
 
-      addMessage: (message, id) => {
+      addMessage: (message, id, status = CHAT_STATUS.PENDING) => {
         set((state) => ({
           messages: {
             ...state.messages,
@@ -34,7 +39,7 @@ export const useChatStore = create<State & Actions>()(
               ...message,
               id,
               createdAt: new Date().toISOString(),
-              status: CHAT_STATUS.PENDING,
+              status,
             },
           },
           messageOrder: [...state.messageOrder, id],
