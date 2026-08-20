@@ -66,6 +66,17 @@ describe("UploadSection", () => {
     expect(screen.getByText(workspace.name)).toBeInTheDocument();
   });
 
+  it("renders the upload icon with the neon sunlight glow", () => {
+    // 1. ARRANGE
+    const { container } = render(<UploadSection />);
+
+    // 2. ACT
+    const glow = container.querySelector(".neon-sun-glow");
+
+    // 3. ASSERT
+    expect(glow).toBeInTheDocument();
+  });
+
   it("uploads using the selected shared workspace ID", async () => {
     // 1. ARRANGE
     const user = userEvent.setup();

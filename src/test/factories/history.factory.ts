@@ -12,6 +12,8 @@ export const buildHistoryEntry = (
   stage: null,
   pageNumber: null,
   totalPages: null,
+  currentStep: null,
+  stepTotal: null,
   error: null,
   ...overrides,
 });

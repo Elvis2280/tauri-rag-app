@@ -9,6 +9,7 @@ import { CHAT_ROLE } from "@/types/ChatTypes";
 import useMessage from "@/hooks/useMessage";
 import useWorkspaceList from "@/hooks/useWorkspaceList";
 import { buildWorkspaceListItem } from "@/test/factories/workspace.factory";
+import { TooltipProvider } from "@/components/ui/tooltip";
 
 vi.mock("@/hooks/useMessage", () => ({ default: vi.fn() }));
 vi.mock("@/hooks/useWorkspaceList", () => ({ default: vi.fn() }));
@@ -16,6 +17,14 @@ vi.mock("@/hooks/useWorkspaceList", () => ({ default: vi.fn() }));
 const mockedUseMessage = vi.mocked(useMessage);
 const mockedUseWorkspaceList = vi.mocked(useWorkspaceList);
 const mockedSendMessage = vi.fn();
+
+function renderChatSection() {
+  return render(
+    <TooltipProvider>
+      <ChatSection />
+    </TooltipProvider>,
+  );
+}
 
 describe("ChatSection", () => {
   beforeEach(() => {
@@ -29,7 +38,7 @@ describe("ChatSection", () => {
     });
     mockedUseMessage.mockReturnValue({
       sendMessage: mockedSendMessage,
-      loading: false,
+      isPending: false,
       error: null,
     });
     mockedUseWorkspaceList.mockReturnValue({
@@ -42,7 +51,7 @@ describe("ChatSection", () => {
 
   it("renders the RAG Chat title in the center when there are no messages", () => {
     // 1. ARRANGE
-    render(<ChatSection />);
+    renderChatSection();
 
     // 2. ACT
     const title = screen.getByRole("heading", { name: "RAG Chat" });
@@ -64,7 +73,7 @@ describe("ChatSection", () => {
     });
 
     // 2. ACT
-    render(<ChatSection />);
+    renderChatSection();
 
     // 3. ASSERT
     expect(screen.queryByRole("heading", { name: "RAG Chat" })).not.toBeInTheDocument();
@@ -75,16 +84,40 @@ describe("ChatSection", () => {
     // 1. ARRANGE
     mockedUseMessage.mockReturnValue({
       sendMessage: mockedSendMessage,
-      loading: true,
+      isPending: true,
       error: null,
     });
 
     // 2. ACT
-    render(<ChatSection />);
+    renderChatSection();
 
     // 3. ASSERT
     expect(screen.getByRole("textbox", { name: "Message" })).toBeDisabled();
     expect(screen.getByRole("button", { name: /send message/i })).toBeDisabled();
+  });
+
+  it("shows a temporary assistant status while a response is pending", () => {
+    // 1. ARRANGE
+    const userMessage = buildChatMessage({ role: CHAT_ROLE.USER });
+    useChatStore.setState({
+      messages: { [userMessage.id]: userMessage },
+      messageOrder: [userMessage.id],
+    });
+    mockedUseMessage.mockReturnValue({
+      sendMessage: mockedSendMessage,
+      isPending: true,
+      error: null,
+    });
+
+    // 2. ACT
+    renderChatSection();
+
+    // 3. ASSERT
+    expect(
+      screen.getByRole("status", {
+        name: "Assistant is preparing a response",
+      }),
+    ).toBeInTheDocument();
   });
 
   it("renders shared workspace options and sends the selected workspace ID", async () => {
@@ -94,7 +127,8 @@ describe("ChatSection", () => {
     const message = buildChatMessage().content;
 
     // 2. ACT
-    render(<ChatSection />);
+    renderChatSection();
+    await user.selectOptions(screen.getByRole("combobox", { name: "Workspace" }), workspace.id);
     await user.type(screen.getByRole("textbox", { name: "Message" }), message);
     await user.click(screen.getByRole("button", { name: /send message/i }));
 

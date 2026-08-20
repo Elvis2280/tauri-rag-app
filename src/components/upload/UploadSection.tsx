@@ -3,7 +3,7 @@ import { useDropzone } from "react-dropzone";
 import { useForm, Controller } from "react-hook-form";
 import { yupResolver } from "@hookform/resolvers/yup";
 import * as yup from "yup";
-import { Upload } from "lucide-react";
+import { FileUp } from "lucide-react";
 import { useFileContext } from "@/context/FileContext";
 import { FILE_STATUS } from "@/types/FileTypes";
 import useFileUpload from "@/hooks/useFileUpload";
@@ -98,11 +98,12 @@ export default function UploadSection() {
         )}
         {...getRootProps()}
       >
-        <div className="text-input">
-          <Upload size={100} />
+        <div className="text-input neon-sun-glow bg-primary/10 rounded-full aspect-square size-24 flex justify-center items-center">
+          <FileUp size={52} className="text-primary" />
         </div>
         <input {...getInputProps()} />
-        <p className="text-lg">Drop the files here</p>
+           <p className="text-4xl mt-4 font-bold">File Upload</p>
+        <p className="text-md text-muted-foreground text-center">Add any documents type to your workspace to memorize them !</p>
       </div>
       <Controller
         control={control}

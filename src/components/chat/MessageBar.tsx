@@ -41,11 +41,10 @@ export default function MessageBar({ onSend, isDisabled }: MessageBarProps) {
             <Button
               variant="default"
               size="icon-lg"
-              className="rounded-full"
+              className="rounded-full cursor-pointer"
               onClick={handleSend}
               disabled={!canSend || isDisabled}
             aria-label="Send message"
-
             >
               <Send size={20} />
             </Button>

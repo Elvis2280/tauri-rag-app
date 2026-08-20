@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useChatStore } from "@/context/chatStore";
 import useMessage from "@/hooks/useMessage";
 import useWorkspaceList from "@/hooks/useWorkspaceList";
@@ -11,12 +11,14 @@ import { Button } from "../ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
 
 export default function ChatSection() {
+  const [workspaceId, setWorkspaceId] = useState<string>("");
+  const containerRef = useRef(null as HTMLDivElement | null)
   const { loading: workspacesLoading, error: workspacesError } =
     useWorkspaceList({ showErrorToast: false });
-  const { sendMessage, loading: messageLoading } = useMessage();
+  const { sendMessage, isPending } = useMessage();
   const messageOrder = useChatStore((state) => state.messageOrder);
   const workspaceList = useGlobalContext((state) => state.workspaces);
-  const [workspaceId, setWorkspaceId] = useState<string>("");
+
   const clearMessages = useChatStore((s) => s.clearMessages)
 
   const handleSend = (content: string) => {
@@ -37,18 +39,18 @@ export default function ChatSection() {
   }, [])
 
   const isMessageBarDisabled =
-    messageLoading || workspacesLoading || !!workspacesError || !workspaceId;
+    isPending || workspacesLoading || !!workspacesError || !workspaceId;
 
   const isNoMessages = messageOrder.length === 0
 
   return (
-    <div className="relative flex h-full w-full flex-col ">
+    <div ref={containerRef} className="relative flex h-full w-full flex-col ">
       <div className="flex flex-1 flex-col overflow-y-auto">
         {isNoMessages ? (
           <EmptyState />
         ) : (
             <div className="mt-10">
-              <MessageList />
+              <MessageList isPending={isPending} />
           </div>
         )}
       </div>
@@ -82,10 +84,10 @@ export default function ChatSection() {
         </div>
         <div className="mr-2">
           <Tooltip>
-            <TooltipTrigger disabled={isNoMessages}>
+            <TooltipTrigger >
               <Button disabled={isNoMessages} variant={"ghost"} onClick={clearMessages} className=" cursor-pointer w-12 h-12 rounded-full" > <BrushCleaning /> </Button>
             </TooltipTrigger>
-            <TooltipContent>
+            <TooltipContent hidden={isNoMessages}>
                 <p>Clear messages</p>
             </TooltipContent>
           </Tooltip>

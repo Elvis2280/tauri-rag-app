@@ -1,7 +1,12 @@
 import MessageItem from "./MessageItem";
 import { useChatStore } from "@/context/chatStore";
+import PendingAssistantMessage from "./PendingAssistantMessage";
 
-export default function MessageList() {
+type MessageListProps = {
+  isPending: boolean;
+};
+
+export default function MessageList({ isPending }: MessageListProps) {
   const ids = useChatStore((state) => state.messageOrder);
 
   return (
@@ -9,6 +14,7 @@ export default function MessageList() {
       {ids.map((id) => (
         <MessageItem key={id} id={id} />
       ))}
+      {isPending && <PendingAssistantMessage />}
     </div>
   );
 }

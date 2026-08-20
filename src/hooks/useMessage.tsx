@@ -25,7 +25,7 @@ type SendMessageApiError = AxiosError<
 
 type UseMessageResult = {
   sendMessage: (params: SendMessageParams) => Promise<SendMessageSuccessResponse>;
-  loading: boolean;
+  isPending: boolean;
   error: string | null;
 };
 
@@ -96,7 +96,7 @@ export default function useMessage(): UseMessageResult {
 
   return {
     sendMessage,
-    loading: mutation.isLoading,
+    isPending: mutation.isPending,
     error: mutation.error
       ? extractApiErrorMessage(mutation.error, SEND_MESSAGE_ERROR)
       : null,

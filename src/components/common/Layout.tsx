@@ -50,7 +50,9 @@ export default function Layout() {
     <div className="flex h-screen bg-background w-full">
       {/* Sidebar Navigation */}
       <nav className="flex flex-col gap-4 p-2 border-r border-sidebar-border min-w-40 bg-sidebar h-full">
-        <h2 className="text-xl font-bold text-center">RAG UI</h2>
+        <h2 className="neon-text-glow text-foreground text-center text-xl font-bold">
+          RAG UI
+        </h2>
         {navList}
       </nav>
 

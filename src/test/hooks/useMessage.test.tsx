@@ -180,7 +180,7 @@ describe("useMessage", () => {
     });
   });
 
-  it("shows loading and keeps only the pending user message before the response resolves", async () => {
+  it("shows isPending and keeps only the pending user message before the response resolves", async () => {
     // 1. ARRANGE
     const workspace = buildWorkspace();
     const userMessage = buildChatMessage();
@@ -208,7 +208,7 @@ describe("useMessage", () => {
         message: userMessage.content,
       });
     });
-    await waitFor(() => expect(result.current.loading).toBe(true));
+    await waitFor(() => expect(result.current.isPending).toBe(true));
 
     // 3. ASSERT
     expect(useChatStore.getState().messageOrder).toHaveLength(1);
@@ -226,7 +226,7 @@ describe("useMessage", () => {
     });
 
     // 5. ASSERT
-    await waitFor(() => expect(result.current.loading).toBe(false));
+    await waitFor(() => expect(result.current.isPending).toBe(false));
     expect(useChatStore.getState().messageOrder).toHaveLength(2);
   });
 });

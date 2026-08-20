@@ -135,6 +135,8 @@ describe("useHistoryWebsocket", () => {
         message: "extracting text",
         page_number: 2,
         total_pages: 10,
+        current_step: 3,
+        step_total: 10,
         result: null,
         error: null,
         timestamp: entry.timestamp,
@@ -149,6 +151,8 @@ describe("useHistoryWebsocket", () => {
     expect(updated.message).toBe("extracting text");
     expect(updated.pageNumber).toBe(2);
     expect(updated.totalPages).toBe(10);
+    expect(updated.currentStep).toBe(3);
+    expect(updated.stepTotal).toBe(10);
   });
 
   it("applies a second WS message after the first update (re-subscribe regression)", () => {

@@ -175,3 +175,59 @@
     @apply font-sans;
     }
 }
+
+@layer utilities {
+  @keyframes neon-sun-glow {
+    0%,
+    100% {
+      box-shadow:
+        0 0 12px color-mix(in oklch, var(--primary) 18%, transparent),
+        0 0 26px color-mix(in oklch, var(--primary) 8%, transparent);
+    }
+
+    50% {
+      box-shadow:
+        0 0 18px color-mix(in oklch, var(--primary) 26%, transparent),
+        0 0 38px color-mix(in oklch, var(--primary) 14%, transparent);
+    }
+  }
+
+  .neon-sun-glow {
+    animation: neon-sun-glow 3s ease-in-out infinite;
+  }
+
+  @keyframes neon-text-glow {
+    0%,
+    100% {
+      text-shadow:
+        0 0 5px color-mix(in oklch, var(--primary) 28%, transparent),
+        0 0 12px color-mix(in oklch, var(--primary) 12%, transparent);
+    }
+
+    50% {
+      text-shadow:
+        0 0 8px color-mix(in oklch, var(--primary) 42%, transparent),
+        0 0 20px color-mix(in oklch, var(--primary) 20%, transparent);
+    }
+  }
+
+  .neon-text-glow {
+    animation: neon-text-glow 3s ease-in-out infinite;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .neon-sun-glow {
+      animation: none;
+      box-shadow:
+        0 0 14px color-mix(in oklch, var(--primary) 18%, transparent),
+        0 0 28px color-mix(in oklch, var(--primary) 8%, transparent);
+    }
+
+    .neon-text-glow {
+      animation: none;
+      text-shadow:
+        0 0 6px color-mix(in oklch, var(--primary) 28%, transparent),
+        0 0 14px color-mix(in oklch, var(--primary) 12%, transparent);
+    }
+  }
+}

@@ -14,12 +14,14 @@ export type statusFileType = (typeof FILE_STATUS)[keyof typeof FILE_STATUS];
 
 export type WebSocketProgressMessage = {
   status: statusFileType;
-  step: string;
+  step: number;
   stage: string;
   message: string;
   file_id: string;
   page_number: number | null;
   total_pages: number | null;
+  current_step: number | null;
+  stepTotal: number | null;
   result: Array<Record<string, unknown>> | null;
   error: string | null;
   timestamp: string;
@@ -30,10 +32,12 @@ export type HistoryEntry = {
   message: string | null;
   status: statusFileType;
   timestamp: string;
-  step: string | null;
+  step: number | null;
   stage: string | null;
   pageNumber: number | null;
   totalPages: number | null;
+  currentStep: number | null;
+  stepTotal: number | null;
   error: string | null;
 };
 

@@ -49,6 +49,8 @@ export function useHistoryWebsocket(): void {
           stage: msg.stage ?? null,
           pageNumber: msg.page_number ?? null,
           totalPages: msg.total_pages ?? null,
+          currentStep: msg.current_step ?? null,
+          stepTotal: msg.stepTotal ?? null,
           error: msg.error ?? null,
         });
 

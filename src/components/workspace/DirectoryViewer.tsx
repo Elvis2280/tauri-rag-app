@@ -7,15 +7,15 @@ import type { Workspace, WorkspaceTreeItem } from "@/types/WorkspaceTypes";
 function getNodeIcon(node: NodeApi<WorkspaceTreeItem>) {
   const data = node.data;
   if (data.type === "workspace") {
-    return <FolderTree size={16} className="shrink-0" />;
+    return <FolderTree size={20} className="shrink-0" />;
   }
   if (data.type === "file") {
-    return <StickyNote size={16} className="shrink-0" />;
+    return <StickyNote size={20} className="shrink-0" />;
   }
   return node.isOpen ? (
-    <FolderOpen size={16} className="shrink-0" />
+    <FolderOpen size={20} className="shrink-0" />
   ) : (
-    <Folder size={16} className="shrink-0" />
+    <Folder size={20} className="shrink-0" />
   );
 }
 
@@ -32,7 +32,7 @@ function WorkspaceNode({ node, style, dragHandle }: RowProps) {
       style={style}
       onClick={() => node.select()}
       className={cn(
-        "flex items-center gap-2 px-1 py-1 text-sm rounded cursor-pointer",
+        "flex items-center gap-y-4 gap-x-2 rounded cursor-pointer text-lg h-10",
         node.isSelected && "bg-sidebar-accent",
       )}
     >
