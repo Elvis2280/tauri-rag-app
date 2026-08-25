@@ -6,7 +6,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import apiRag from "@/lib/axios";
 import { WORKSPACE_ENDPOINTS } from "@/lib/api/endpoints";
 import { useGlobalContext } from "@/context/GlobalContext";
-import useWorkspaceList from "@/hooks/useWorkspaceList";
+import { useWorkspaceList } from "@/hooks/useWorkspace";
 import { buildWorkspaceListItem } from "@/test/factories/workspace.factory";
 import { toast } from "sonner";
 

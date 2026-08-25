@@ -5,7 +5,7 @@ import UploadSection from "./components/upload/UploadSection";
 import WorkspacePage from "./components/workspace/WorkspacePage";
 import HistorySection from "./components/history/HistorySection";
 import ChatSection from "./components/chat/ChatSection";
-import useWorkspaceList from "@/hooks/useWorkspaceList";
+import { useWorkspaceList } from "@/hooks/useWorkspace";
 
 function App() {
   useWorkspaceList();

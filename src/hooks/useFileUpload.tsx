@@ -5,7 +5,7 @@ import { Loader2Icon } from "lucide-react";
 import apiRag from "@/lib/axios";
 import { DOCUMENT_ENDPOINTS } from "@/lib/api/endpoints";
 import { extractApiErrorMessage } from "@/lib/api/errors";
-import { workspaceTreeQueryKey } from "@/hooks/useWorkspaceTree";
+import { workspaceKeys } from "@/hooks/useWorkspace";
 import { useHistory } from "@/context/HistoryContext";
 import type { UploadFileSuccessResponse } from "@/types/UploadFileType";
 
@@ -46,7 +46,7 @@ export default function useFileUpload(): UseFileUploadResult {
                 Uploading {file.name}…
               </span>
             ),
-            success: <span className="text-success">{file.name} uploaded</span>,
+            success: <span className="text-success">{file.name} uploaded <br/> check history page!</span>,
             error: (err: unknown) => (
               <span className="text-destructive-foreground bg-destructive px-2 py-1 rounded">
                 {file.name} failed:{" "}
@@ -65,7 +65,7 @@ export default function useFileUpload(): UseFileUploadResult {
       return results.filter((r): r is UploadFileSuccessResponse => r !== null);
     },
     onSuccess: (data: UploadFileSuccessResponse[]) => {
-      queryClient.invalidateQueries({ queryKey: workspaceTreeQueryKey });
+      queryClient.invalidateQueries({ queryKey: workspaceKeys.tree() });
       data.forEach((result) => {
         useHistory.getState().registerFileId(result.document_id);
       });

@@ -180,6 +180,45 @@ describe("useMessage", () => {
     });
   });
 
+  it("persists backend details for a not-found response", async () => {
+    // 1. ARRANGE
+    const workspace = buildWorkspace();
+    const userMessage = buildChatMessage();
+    const details = buildChatMessage().content;
+    const apiError = {
+      response: {
+        status: 404,
+        data: { details },
+      },
+    };
+    mockedPost.mockRejectedValue(apiError);
+    const { result } = renderHook(() => useMessage(), {
+      wrapper: createWrapper(),
+    });
+
+    // 2. ACT
+    await act(async () => {
+      await expect(
+        result.current.sendMessage({
+          workspaceId: workspace.id,
+          message: userMessage.content,
+        }),
+      ).rejects.toBe(apiError);
+    });
+
+    // 3. ASSERT
+    expect(mockedToastError).toHaveBeenCalledWith("Failed to send message", {
+      description: details,
+    });
+    const state = useChatStore.getState();
+    const errorMessage = state.messages[state.messageOrder[1]];
+    expect(errorMessage).toMatchObject({
+      role: CHAT_ROLE.ASSISTANT,
+      content: details,
+      status: CHAT_STATUS.ERROR,
+    });
+  });
+
   it("shows isPending and keeps only the pending user message before the response resolves", async () => {
     // 1. ARRANGE
     const workspace = buildWorkspace();

@@ -19,9 +19,7 @@ type SendMessageMutationParams = SendMessageParams & {
   userMessageId: string;
 };
 
-type SendMessageApiError = AxiosError<
-  SendMessageErrorResponse | { message: string }
->;
+type SendMessageApiError = AxiosError<SendMessageErrorResponse>;
 
 type UseMessageResult = {
   sendMessage: (params: SendMessageParams) => Promise<SendMessageSuccessResponse>;

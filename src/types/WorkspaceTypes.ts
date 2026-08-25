@@ -51,6 +51,22 @@ export type WorkspaceListItem = {
 
 export type ApiWorkspaceListResponse = WorkspaceListItem[];
 
+export type DisableWorkspaceResponse = {
+  message: string;
+};
+
+export type DisableWorkspaceValidationDetail = {
+  loc: Array<string | number>;
+  msg: string;
+  type: string;
+  input: string;
+  ctx: Record<string, never>;
+};
+
+export type DisableWorkspaceErrorResponse = {
+  detail: DisableWorkspaceValidationDetail[];
+};
+
 export type WorkspaceFileNode = {
   type: "file";
   id: string;

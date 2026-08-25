@@ -61,7 +61,7 @@ export default function FileStatusItem({
     <Item
       variant="outline"
       size="sm"
-      className={cn("relative overflow-hidden", getCardTint(status))}
+      className={cn("relative overflow-hidden rounded", getCardTint(status))}
     >
       {showProgress && (
         <div

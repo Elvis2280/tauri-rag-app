@@ -23,6 +23,15 @@ export type MessageErrorItem = {
   ctx?: Record<string, unknown>;
 };
 
-export type SendMessageErrorResponse = {
+export type SendMessageValidationErrorResponse = {
   detail: MessageErrorItem[];
 };
+
+export type SendMessageDetailsErrorResponse = {
+  detail: string;
+};
+
+export type SendMessageErrorResponse =
+  | SendMessageValidationErrorResponse
+  | SendMessageDetailsErrorResponse
+  | { message: string };

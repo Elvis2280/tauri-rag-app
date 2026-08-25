@@ -7,12 +7,12 @@ import { useGlobalContext } from "@/context/GlobalContext";
 import { buildChatMessage } from "@/test/factories/chat.factory";
 import { CHAT_ROLE } from "@/types/ChatTypes";
 import useMessage from "@/hooks/useMessage";
-import useWorkspaceList from "@/hooks/useWorkspaceList";
+import { useWorkspaceList } from "@/hooks/useWorkspace";
 import { buildWorkspaceListItem } from "@/test/factories/workspace.factory";
 import { TooltipProvider } from "@/components/ui/tooltip";
 
 vi.mock("@/hooks/useMessage", () => ({ default: vi.fn() }));
-vi.mock("@/hooks/useWorkspaceList", () => ({ default: vi.fn() }));
+vi.mock("@/hooks/useWorkspace", () => ({ useWorkspaceList: vi.fn() }));
 
 const mockedUseMessage = vi.mocked(useMessage);
 const mockedUseWorkspaceList = vi.mocked(useWorkspaceList);

@@ -1,14 +1,69 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, render } from "@testing-library/react";
+import { faker } from "@faker-js/faker";
+import type { CSSProperties, ReactNode } from "react";
+import { act, render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import DirectoryViewer from "@/components/workspace/DirectoryViewer";
-import { buildWorkspace } from "@/test/factories/workspace.factory";
+import {
+  buildWorkspace,
+  buildWorkspaceFolderNode,
+} from "@/test/factories/workspace.factory";
+import type { WorkspaceTreeItem } from "@/types/WorkspaceTypes";
 
 const mockTreeHeight = vi.fn();
+const mockNodeSelect = vi.fn();
+const mockDisableWorkspace = vi.fn();
+
+vi.mock("@/hooks/useWorkspace", () => ({
+  useDisableWorkspace: () => ({
+    disableWorkspace: mockDisableWorkspace,
+    isPending: false,
+    error: null,
+  }),
+}));
 
 vi.mock("react-arborist", () => ({
-  Tree: ({ height }: { height: number }) => {
+  Tree: ({
+    data,
+    height,
+    children,
+  }: {
+    data: WorkspaceTreeItem[];
+    height: number;
+    children: (props: {
+      node: {
+        data: WorkspaceTreeItem;
+        isOpen: boolean;
+        isSelected: boolean;
+        select: () => void;
+        toggle: () => void;
+      };
+      style: CSSProperties;
+    }) => ReactNode;
+  }) => {
     mockTreeHeight(height);
-    return <div data-testid="tree" style={{ height }} />;
+
+    const renderNode = (item: WorkspaceTreeItem): ReactNode => (
+      <div key={item.id}>
+        {children({
+          node: {
+            data: item,
+            isOpen: false,
+            isSelected: false,
+            select: mockNodeSelect,
+            toggle: vi.fn(),
+          },
+          style: {},
+        })}
+        {"children" in item ? item.children.map(renderNode) : null}
+      </div>
+    );
+
+    return (
+      <div data-testid="tree" style={{ height }}>
+        {data.map(renderNode)}
+      </div>
+    );
   },
 }));
 
@@ -24,6 +79,8 @@ describe("DirectoryViewer", () => {
   beforeEach(() => {
     setWindowHeight(800);
     mockTreeHeight.mockClear();
+    mockNodeSelect.mockClear();
+    mockDisableWorkspace.mockReset();
   });
 
   afterEach(() => {
@@ -68,5 +125,62 @@ describe("DirectoryViewer", () => {
 
     // 3. ASSERT
     expect(removeSpy).toHaveBeenCalledWith("resize", expect.any(Function));
+  });
+
+  it("renders the delete button only for top-level workspace rows", () => {
+    // 1. ARRANGE
+    const child = buildWorkspaceFolderNode();
+    const workspace = buildWorkspace({ children: [child] });
+
+    // 2. ACT
+    render(<DirectoryViewer workspaces={[workspace]} />);
+
+    // 3. ASSERT
+    expect(
+      screen.getByRole("button", { name: `Delete ${workspace.name}` }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: `Delete ${child.name}` }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("opens the delete modal without selecting the workspace row", async () => {
+    // 1. ARRANGE
+    const user = userEvent.setup();
+    const workspace = buildWorkspace();
+
+    // 2. ACT
+    render(<DirectoryViewer workspaces={[workspace]} />);
+    await user.click(
+      screen.getByRole("button", { name: `Delete ${workspace.name}` }),
+    );
+
+    // 3. ASSERT
+    expect(mockNodeSelect).not.toHaveBeenCalled();
+    expect(screen.getByRole("dialog")).toHaveTextContent(
+      "Delete this workspace?",
+    );
+    expect(
+      within(screen.getByRole("dialog")).getByText(workspace.name),
+    ).toBeInTheDocument();
+  });
+
+  it("disables the selected workspace after confirmation", async () => {
+    // 1. ARRANGE
+    const user = userEvent.setup();
+    const workspace = buildWorkspace();
+    mockDisableWorkspace.mockResolvedValue({
+      message: faker.lorem.sentence(),
+    });
+
+    // 2. ACT
+    render(<DirectoryViewer workspaces={[workspace]} />);
+    await user.click(
+      screen.getByRole("button", { name: `Delete ${workspace.name}` }),
+    );
+    await user.click(screen.getByRole("button", { name: "Delete workspace" }));
+
+    // 3. ASSERT
+    expect(mockDisableWorkspace).toHaveBeenCalledWith(workspace.id);
   });
 });

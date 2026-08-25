@@ -136,6 +136,19 @@ function DialogTitle({
   )
 }
 
+function DialogForm({
+  className,
+  ...props
+}: React.ComponentProps<"form">) {
+  return (
+    <form
+      data-slot="dialog-form"
+      className={cn("flex flex-col gap-6", className)}
+      {...props}
+    />
+  )
+}
+
 function DialogDescription({
   className,
   ...props
@@ -158,6 +171,7 @@ export {
   DialogContent,
   DialogDescription,
   DialogFooter,
+  DialogForm,
   DialogHeader,
   DialogOverlay,
   DialogPortal,

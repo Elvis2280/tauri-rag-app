@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render } from "@testing-library/react";
 import App from "@/App";
-import useWorkspaceList from "@/hooks/useWorkspaceList";
+import { useWorkspaceList } from "@/hooks/useWorkspace";
 
-vi.mock("@/hooks/useWorkspaceList", () => ({ default: vi.fn() }));
+vi.mock("@/hooks/useWorkspace", () => ({ useWorkspaceList: vi.fn() }));
 vi.mock("@/components/common/Layout", () => ({
   default: () => null,
 }));

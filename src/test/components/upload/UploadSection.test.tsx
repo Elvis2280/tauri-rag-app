@@ -4,12 +4,12 @@ import userEvent from "@testing-library/user-event";
 import UploadSection from "@/components/upload/UploadSection";
 import { useGlobalContext } from "@/context/GlobalContext";
 import useFileUpload from "@/hooks/useFileUpload";
-import useWorkspaceList from "@/hooks/useWorkspaceList";
+import { useWorkspaceList } from "@/hooks/useWorkspace";
 import { useFileContext } from "@/context/FileContext";
 import { buildWorkspaceListItem } from "@/test/factories/workspace.factory";
 
 vi.mock("@/hooks/useFileUpload", () => ({ default: vi.fn() }));
-vi.mock("@/hooks/useWorkspaceList", () => ({ default: vi.fn() }));
+vi.mock("@/hooks/useWorkspace", () => ({ useWorkspaceList: vi.fn() }));
 vi.mock("@/components/upload/UploadModal", () => ({
   default: ({
     workspaces,

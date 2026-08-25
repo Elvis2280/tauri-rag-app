@@ -1,5 +1,5 @@
 import { Button } from "../ui/button";
-import useWorkspaceTree from "@/hooks/useWorkspaceTree";
+import { useWorkspaceTree } from "@/hooks/useWorkspace";
 import DirectoryViewer from "./DirectoryViewer";
 
 export default function WorkspacePage() {

@@ -7,7 +7,7 @@ import { FileUp } from "lucide-react";
 import { useFileContext } from "@/context/FileContext";
 import { FILE_STATUS } from "@/types/FileTypes";
 import useFileUpload from "@/hooks/useFileUpload";
-import useWorkspaceList from "@/hooks/useWorkspaceList";
+import { useWorkspaceList } from "@/hooks/useWorkspace";
 import { useGlobalContext } from "@/context/GlobalContext";
 import { nanoid } from "nanoid";
 import { cn } from "@/lib/utils";

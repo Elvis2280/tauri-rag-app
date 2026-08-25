@@ -3,6 +3,7 @@ import {
   DialogContent,
   DialogDescription,
   DialogFooter,
+  DialogForm,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -49,34 +50,41 @@ export default function UploadModal({
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="rounded">
-        <DialogHeader>
-          <DialogTitle>Files to upload</DialogTitle>
-          <DialogDescription>
-            Select a workspace and confirm the files to upload.
-          </DialogDescription>
-        </DialogHeader>
-        <UploadWorkspaceSelect
-          value={workspaceId}
-          onValueChange={onWorkspaceChange}
-          onBlur={onWorkspaceBlur}
-          error={workspaceError}
-          workspaces={workspaces}
-          isLoading={workspacesLoading}
-          loadError={workspacesError}
-        />
-        <ItemGroup className="max-h-60 overflow-y-auto flex flex-col gap-2">
-          {files.map((file) => (
-            <UploadModalFileItem key={file.id} file={file} />
-          ))}
-        </ItemGroup>
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button onClick={onUpload} disabled={!canUpload}>
-            Upload
-          </Button>
-        </DialogFooter>
+        <DialogForm
+          onSubmit={(event) => {
+            event.preventDefault();
+            onUpload();
+          }}
+        >
+          <DialogHeader>
+            <DialogTitle>Files to upload</DialogTitle>
+            <DialogDescription>
+              Select a workspace and confirm the files to upload.
+            </DialogDescription>
+          </DialogHeader>
+          <UploadWorkspaceSelect
+            value={workspaceId}
+            onValueChange={onWorkspaceChange}
+            onBlur={onWorkspaceBlur}
+            error={workspaceError}
+            workspaces={workspaces}
+            isLoading={workspacesLoading}
+            loadError={workspacesError}
+          />
+          <ItemGroup className="max-h-60 overflow-y-auto flex flex-col gap-2">
+            {files.map((file) => (
+              <UploadModalFileItem key={file.id} file={file} />
+            ))}
+          </ItemGroup>
+          <DialogFooter>
+            <Button type="button" variant="ghost" onClick={onClose}>
+              Cancel
+            </Button>
+            <Button type="submit" variant="outline" disabled={!canUpload}>
+              Upload
+            </Button>
+          </DialogFooter>
+        </DialogForm>
       </DialogContent>
     </Dialog>
   );

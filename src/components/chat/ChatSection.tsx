@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useChatStore } from "@/context/chatStore";
 import useMessage from "@/hooks/useMessage";
-import useWorkspaceList from "@/hooks/useWorkspaceList";
+import { useWorkspaceList } from "@/hooks/useWorkspace";
 import { useGlobalContext } from "@/context/GlobalContext";
 import MessageBar from "./MessageBar";
 import MessageList from "./MessageList";
