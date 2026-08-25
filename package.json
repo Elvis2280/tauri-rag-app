@@ -12,7 +12,8 @@
     "test:watch": "vitest",
     "tauri": "tauri",
     "tauri:build:windows": "tauri build --target x86_64-pc-windows-msvc --bundles nsis --no-sign",
-    "tauri:build:mac": "tauri build --target universal-apple-darwin --bundles dmg --no-sign"
+    "tauri:build:windows:x86": "tauri build --target i686-pc-windows-msvc --bundles nsis --no-sign",
+    "tauri:build:mac": "tauri build --target universal-apple-darwin --bundles dmg"
   },
   "dependencies": {
     "@fontsource-variable/dm-sans": "^5.2.8",

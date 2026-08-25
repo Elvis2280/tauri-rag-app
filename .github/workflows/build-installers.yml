@@ -1,25 +1,32 @@
-name: Build installers
+name: Release installers
 
 on:
-  workflow_dispatch:
   push:
     tags:
       - "v*"
 
 jobs:
-  build:
+  publish:
     name: Build ${{ matrix.name }}
+    permissions:
+      contents: write
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         include:
-          - name: Windows x64 NSIS
+          - name: Windows x64
             os: windows-latest
+            rust_targets: x86_64-pc-windows-msvc
             args: --target x86_64-pc-windows-msvc --bundles nsis --no-sign
-          - name: macOS universal DMG
+          - name: Windows x86
+            os: windows-latest
+            rust_targets: i686-pc-windows-msvc
+            args: --target i686-pc-windows-msvc --bundles nsis --no-sign
+          - name: macOS universal
             os: macos-latest
-            args: --target universal-apple-darwin --bundles dmg --no-sign
+            rust_targets: aarch64-apple-darwin,x86_64-apple-darwin
+            args: --target universal-apple-darwin --bundles dmg
 
     env:
       VITE_API_BASE_URL: ${{ vars.VITE_API_BASE_URL }}
@@ -43,7 +50,27 @@ jobs:
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: ${{ matrix.os == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || 'x86_64-pc-windows-msvc' }}
+          targets: ${{ matrix.rust_targets }}
+
+      - name: Validate release version
+        shell: bash
+        run: |
+          node <<'NODE'
+          const fs = require("node:fs");
+
+          const packageVersion = JSON.parse(fs.readFileSync("package.json", "utf8")).version;
+          const tauriVersion = JSON.parse(fs.readFileSync("src-tauri/tauri.conf.json", "utf8")).version;
+          const cargoVersion = fs.readFileSync("src-tauri/Cargo.toml", "utf8").match(/^version = "([^"]+)"/m)?.[1];
+          const expectedTag = `v${tauriVersion}`;
+
+          if (!cargoVersion || packageVersion !== tauriVersion || cargoVersion !== tauriVersion) {
+            throw new Error(`Version mismatch: package=${packageVersion}, tauri=${tauriVersion}, cargo=${cargoVersion ?? "missing"}`);
+          }
+
+          if (process.env.GITHUB_REF_NAME !== expectedTag) {
+            throw new Error(`Tag ${process.env.GITHUB_REF_NAME} does not match ${expectedTag}`);
+          }
+          NODE
 
       - name: Validate build environment
         shell: bash
@@ -56,9 +83,21 @@ jobs:
 
       - name: Build installer
         uses: tauri-apps/tauri-action@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           projectPath: .
           tauriScript: pnpm tauri
           args: ${{ matrix.args }}
-          uploadWorkflowArtifacts: true
-          workflowArtifactNamePattern: "rag-desktop-${{ matrix.os }}-[arch]-[bundle]"
+          tagName: v__VERSION__
+          releaseName: RAG Desktop v__VERSION__
+          releaseBody: |
+            Download the installer for your operating system:
+
+            - Windows x64: `windows-x64`
+            - Windows x86: `windows-x86`
+            - macOS Intel and Apple Silicon: `macos-universal`
+          releaseDraft: true
+          prerelease: false
+          releaseAssetNamePattern: "rag-desktop-v[version]-[platform]-[arch][setup].[ext]"
+          uploadUpdaterJson: false

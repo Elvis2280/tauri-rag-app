@@ -16,10 +16,30 @@ Build an installer on its matching platform with:
 
 ```sh
 pnpm tauri:build:windows
+pnpm tauri:build:windows:x86
 pnpm tauri:build:mac
 ```
 
-The GitHub Actions workflow builds unsigned Windows x64 NSIS and universal macOS DMG installers. Configure the repository variables `VITE_API_BASE_URL` and `VITE_WS_BASE_URL` before running it.
+The GitHub Actions release workflow builds these files:
+
+- Windows x64 NSIS installer
+- Windows x86 NSIS installer
+- Universal macOS DMG for Intel and Apple Silicon
+
+Configure the repository variables `VITE_API_BASE_URL` and `VITE_WS_BASE_URL` before releasing.
+
+To publish a release, keep the versions in `package.json`, `src-tauri/tauri.conf.json`, and `src-tauri/Cargo.toml` synchronized, then push a matching tag:
+
+```sh
+git tag v0.2.0
+git push origin v0.2.0
+```
+
+GitHub Actions creates a draft release with the three installers attached. Test the files, then publish the draft from the repository’s Releases page. Authorized repository users can download the published installers from:
+
+```text
+https://github.com/Elvis2280/tauri-rag-app/releases/latest
+```
 
 ## Recommended IDE Setup
 
