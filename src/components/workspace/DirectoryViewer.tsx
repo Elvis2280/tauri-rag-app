@@ -6,7 +6,10 @@ import type { Workspace, WorkspaceTreeItem } from "@/types/WorkspaceTypes";
 import { Button } from "../ui/button";
 import CreateWorkspaceModal from "./CreateWorkspaceModal";
 import DeleteWorkspaceModal from "./DeleteWorkspaceModal";
-import { useDisableWorkspace } from "@/hooks/useWorkspace";
+import {
+  useCreateWorkspace,
+  useDisableWorkspace,
+} from "@/hooks/useWorkspace";
 
 function getNodeIcon(node: NodeApi<WorkspaceTreeItem>) {
   const data = node.data;
@@ -76,6 +79,8 @@ type DirectoryViewerProps = {
 };
 
 export default function DirectoryViewer({ workspaces }: DirectoryViewerProps) {
+  const { createWorkspace, isPending: isCreatingWorkspace } =
+    useCreateWorkspace();
   const { disableWorkspace, isPending: isDisablingWorkspace } =
     useDisableWorkspace();
   const [isCreateWorkspaceOpen, setIsCreateWorkspaceOpen] = useState(false);
@@ -131,6 +136,11 @@ export default function DirectoryViewer({ workspaces }: DirectoryViewerProps) {
     );
   };
 
+  const handleCreateWorkspace = async (name: string) => {
+    await createWorkspace({ name });
+    setIsCreateWorkspaceOpen(false);
+  };
+
   return (
     <div className="relative w-full h-screen p-2">
       <div className="flex justify-between my-2 items-center">
@@ -171,6 +181,8 @@ export default function DirectoryViewer({ workspaces }: DirectoryViewerProps) {
       <CreateWorkspaceModal
         isOpen={isCreateWorkspaceOpen}
         onClose={() => setIsCreateWorkspaceOpen(false)}
+        onCreate={handleCreateWorkspace}
+        isPending={isCreatingWorkspace}
       />
       <DeleteWorkspaceModal
         isOpen={workspaceToDelete !== null}

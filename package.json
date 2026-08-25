@@ -3,13 +3,16 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
+  "packageManager": "pnpm@10.28.2",
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "tauri:build:windows": "tauri build --target x86_64-pc-windows-msvc --bundles nsis --no-sign",
+    "tauri:build:mac": "tauri build --target universal-apple-darwin --bundles dmg --no-sign"
   },
   "dependencies": {
     "@fontsource-variable/dm-sans": "^5.2.8",

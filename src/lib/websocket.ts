@@ -1,3 +1,5 @@
+import { buildWebSocketUrl } from "@/lib/env";
+
 enum State {
   IDLE = "idle",
   CONNECTING = "connecting",
@@ -9,7 +11,7 @@ enum State {
 type MessageHandler = (message: unknown) => void;
 type StateHandler = (state: string) => void;
 
-export const WS_URL = "ws://localhost:8080/ws";
+export const WS_URL = buildWebSocketUrl("ws");
 
 export type WebSocketClient = {
   connect(): void;

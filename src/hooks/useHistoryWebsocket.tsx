@@ -3,8 +3,9 @@ import { toast } from "sonner";
 import { createWebSocketClient, type WebSocketClient } from "@/lib/websocket";
 import { useHistory } from "@/context/HistoryContext";
 import { FILE_STATUS, type WebSocketProgressMessage } from "@/types/FileTypes";
+import { buildWebSocketUrl } from "@/lib/env";
 
-const WS_BASE = "ws://localhost:8080/api/v1";
+const WS_BASE = buildWebSocketUrl("api/v1");
 
 const clients = new Map<string, WebSocketClient>();
 const intentionallyClosed = new Set<string>();

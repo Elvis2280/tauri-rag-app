@@ -10,8 +10,11 @@ import {
   mapTreeResponseToUI,
   type ApiWorkspaceListResponse,
   type ApiWorkspaceTreeResponse,
+  type CreateWorkspaceParams,
+  type CreateWorkspaceResponse,
   type DisableWorkspaceErrorResponse,
   type DisableWorkspaceResponse,
+  type WorkspaceValidationErrorResponse,
   type Workspace,
   type WorkspaceListItem,
 } from "@/types/WorkspaceTypes";
@@ -26,8 +29,10 @@ export const workspaceKeys = {
 
 const WORKSPACE_LIST_ERROR = "Failed to load workspaces";
 const WORKSPACE_TREE_ERROR = "Failed to load workspace tree";
+const CREATE_WORKSPACE_ERROR = "Failed to create workspace";
 const DISABLE_WORKSPACE_ERROR = "Failed to disable workspace";
 
+type CreateWorkspaceApiError = AxiosError<WorkspaceValidationErrorResponse>;
 type DisableWorkspaceApiError = AxiosError<DisableWorkspaceErrorResponse>;
 
 type WorkspaceQueryResult<TData> = {
@@ -67,6 +72,17 @@ async function postDisableWorkspace(
   return response.data;
 }
 
+async function postCreateWorkspace(
+  params: CreateWorkspaceParams,
+): Promise<CreateWorkspaceResponse> {
+  const response = await apiRag.post<CreateWorkspaceResponse>(
+    WORKSPACE_ENDPOINTS.create,
+    params,
+  );
+
+  return response.data;
+}
+
 function useWorkspaceQueryErrorToast(
   error: unknown,
   fallback: string,
@@ -87,6 +103,14 @@ function getDisableWorkspaceErrorMessage(error: DisableWorkspaceApiError) {
   }
 
   return DISABLE_WORKSPACE_ERROR;
+}
+
+function getCreateWorkspaceErrorMessage(error: CreateWorkspaceApiError) {
+  if (error.response?.status === 422) {
+    return extractApiErrorMessage(error, CREATE_WORKSPACE_ERROR);
+  }
+
+  return CREATE_WORKSPACE_ERROR;
 }
 
 export function useWorkspaceList(
@@ -142,6 +166,47 @@ export function useWorkspaceTree(): WorkspaceQueryResult<Workspace[] | null> {
     refetch: () => {
       void query.refetch();
     },
+  };
+}
+
+type UseCreateWorkspaceResult = {
+  createWorkspace: (
+    params: CreateWorkspaceParams,
+  ) => Promise<CreateWorkspaceResponse>;
+  isPending: boolean;
+  error: string | null;
+};
+
+export function useCreateWorkspace(): UseCreateWorkspaceResult {
+  const queryClient = useQueryClient();
+  const mutation = useMutation<
+    CreateWorkspaceResponse,
+    CreateWorkspaceApiError,
+    CreateWorkspaceParams
+  >({
+    mutationFn: postCreateWorkspace,
+    onSuccess: async (workspace) => {
+      toast.success(`Created workspace ${workspace.name}`);
+      await queryClient.invalidateQueries({ queryKey: workspaceKeys.all });
+    },
+    onError: (error) => {
+      toast.error(CREATE_WORKSPACE_ERROR, {
+        description: getCreateWorkspaceErrorMessage(error),
+      });
+    },
+  });
+
+  const createWorkspace = useCallback(
+    (params: CreateWorkspaceParams) => mutation.mutateAsync(params),
+    [mutation.mutateAsync],
+  );
+
+  return {
+    createWorkspace,
+    isPending: mutation.isLoading,
+    error: mutation.error
+      ? getCreateWorkspaceErrorMessage(mutation.error)
+      : null,
   };
 }
 

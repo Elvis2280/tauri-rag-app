@@ -7,14 +7,21 @@ import DirectoryViewer from "@/components/workspace/DirectoryViewer";
 import {
   buildWorkspace,
   buildWorkspaceFolderNode,
+  buildWorkspaceListItem,
 } from "@/test/factories/workspace.factory";
 import type { WorkspaceTreeItem } from "@/types/WorkspaceTypes";
 
 const mockTreeHeight = vi.fn();
 const mockNodeSelect = vi.fn();
 const mockDisableWorkspace = vi.fn();
+const mockCreateWorkspace = vi.fn();
 
 vi.mock("@/hooks/useWorkspace", () => ({
+  useCreateWorkspace: () => ({
+    createWorkspace: mockCreateWorkspace,
+    isPending: false,
+    error: null,
+  }),
   useDisableWorkspace: () => ({
     disableWorkspace: mockDisableWorkspace,
     isPending: false,
@@ -81,6 +88,7 @@ describe("DirectoryViewer", () => {
     mockTreeHeight.mockClear();
     mockNodeSelect.mockClear();
     mockDisableWorkspace.mockReset();
+    mockCreateWorkspace.mockReset();
   });
 
   afterEach(() => {
@@ -182,5 +190,23 @@ describe("DirectoryViewer", () => {
 
     // 3. ASSERT
     expect(mockDisableWorkspace).toHaveBeenCalledWith(workspace.id);
+  });
+
+  it("creates a workspace from the create modal", async () => {
+    // 1. ARRANGE
+    const user = userEvent.setup();
+    const workspaceName = faker.company.name();
+    mockCreateWorkspace.mockResolvedValue(buildWorkspaceListItem({
+      name: workspaceName,
+    }));
+
+    // 2. ACT
+    render(<DirectoryViewer workspaces={[]} />);
+    await user.click(screen.getByRole("button", { name: "Create Workspace" }));
+    await user.type(screen.getByLabelText("Workspace name"), workspaceName);
+    await user.click(screen.getByRole("button", { name: "Create" }));
+
+    // 3. ASSERT
+    expect(mockCreateWorkspace).toHaveBeenCalledWith({ name: workspaceName });
   });
 });

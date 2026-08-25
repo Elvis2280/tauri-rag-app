@@ -1,4 +1,5 @@
 export const WORKSPACE_ENDPOINTS = {
+  create: "/workspace",
   tree: "/workspace/tree",
   list: "/workspace/list",
   disable: (workspaceId: string) => `/workspace/${workspaceId}/disable`,

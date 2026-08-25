@@ -22,11 +22,15 @@ type CreateWorkspaceFormValues = yup.InferType<typeof createWorkspaceSchema>;
 type CreateWorkspaceModalProps = {
   isOpen: boolean;
   onClose: () => void;
+  onCreate: (name: string) => Promise<void>;
+  isPending: boolean;
 };
 
 export default function CreateWorkspaceModal({
   isOpen,
   onClose,
+  onCreate,
+  isPending,
 }: CreateWorkspaceModalProps) {
   const {
     register,
@@ -44,9 +48,8 @@ export default function CreateWorkspaceModal({
     }
   }, [isOpen, reset]);
 
-  const handleFormSubmit = handleSubmit(() => {
-    reset({ name: "" });
-    onClose();
+  const handleFormSubmit = handleSubmit((values) => {
+    void onCreate(values.name).catch(() => undefined);
   });
 
   const handleCancel = () => {
@@ -95,8 +98,8 @@ export default function CreateWorkspaceModal({
             >
               Cancel
             </Button>
-            <Button type="submit" variant="outline">
-              Create
+            <Button type="submit" variant="outline" disabled={isPending}>
+              {isPending ? "Creating…" : "Create"}
             </Button>
           </DialogFooter>
         </DialogForm>
