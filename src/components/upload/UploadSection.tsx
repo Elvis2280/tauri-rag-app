@@ -11,6 +11,7 @@ import { useWorkspaceList } from "@/hooks/useWorkspace";
 import { useGlobalContext } from "@/context/GlobalContext";
 import { nanoid } from "nanoid";
 import { cn } from "@/lib/utils";
+import { ACCEPTED_FILE_TYPES } from "@/constants/upload";
 import UploadModal from "./UploadModal";
 
 type acceptedFilesType = File[];
@@ -87,7 +88,10 @@ export default function UploadSection() {
     [addFileToContext],
   );
 
-  const { getRootProps, getInputProps, isDragActive } = useDropzone({ onDrop });
+  const { getRootProps, getInputProps, isDragActive } = useDropzone({
+    onDrop,
+    accept: ACCEPTED_FILE_TYPES,
+  });
 
   return (
     <div className="h-screen flex justify-center items-center overflow-hidden relative">

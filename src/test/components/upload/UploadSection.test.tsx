@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import UploadSection from "@/components/upload/UploadSection";
+import { ACCEPTED_FILE_TYPES } from "@/constants/upload";
 import { useGlobalContext } from "@/context/GlobalContext";
 import useFileUpload from "@/hooks/useFileUpload";
 import { useWorkspaceList } from "@/hooks/useWorkspace";
@@ -64,6 +65,38 @@ describe("UploadSection", () => {
 
     // 3. ASSERT
     expect(screen.getByText(workspace.name)).toBeInTheDocument();
+  });
+
+  it("configures the backend-supported upload file types", () => {
+    // 1. ARRANGE
+    const expectedFileTypes = {
+      "application/pdf": [".pdf"],
+      "application/msword": [".doc"],
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document": [
+        ".docx",
+      ],
+      "application/vnd.ms-excel": [".xls"],
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": [
+        ".xlsx",
+      ],
+      "application/vnd.ms-powerpoint": [".ppt"],
+      "application/vnd.openxmlformats-officedocument.presentationml.presentation": [
+        ".pptx",
+      ],
+      "application/vnd.oasis.opendocument.text": [".odt"],
+      "application/vnd.oasis.opendocument.spreadsheet": [".ods"],
+      "application/vnd.oasis.opendocument.presentation": [".odp"],
+      "text/csv": [".csv"],
+      "image/png": [".png"],
+      "image/jpeg": [".jpg", ".jpeg"],
+      "image/webp": [".webp"],
+    };
+
+    // 2. ACT
+    const configuredFileTypes = ACCEPTED_FILE_TYPES;
+
+    // 3. ASSERT
+    expect(configuredFileTypes).toEqual(expectedFileTypes);
   });
 
   it("renders the upload icon with the neon sunlight glow", () => {
