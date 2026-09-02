@@ -1,17 +1,17 @@
-import { buildWebSocketUrl } from "@/lib/env";
+import { buildWebSocketUrl } from '@/lib/env';
 
 enum State {
-  IDLE = "idle",
-  CONNECTING = "connecting",
-  OPEN = "open",
-  CLOSED = "closed",
-  ERROR = "error",
+  IDLE = 'idle',
+  CONNECTING = 'connecting',
+  OPEN = 'open',
+  CLOSED = 'closed',
+  ERROR = 'error',
 }
 
 type MessageHandler = (message: unknown) => void;
 type StateHandler = (state: string) => void;
 
-export const WS_URL = buildWebSocketUrl("ws");
+export const WS_URL = buildWebSocketUrl('ws');
 
 export type WebSocketClient = {
   connect(): void;
@@ -133,7 +133,7 @@ function createWebSocketClient(
 
   function send(payload: unknown): void {
     if (state !== State.OPEN || !socket) {
-      throw new Error("WebSocket is not open");
+      throw new Error('WebSocket is not open');
     }
     socket.send(JSON.stringify(payload));
   }
