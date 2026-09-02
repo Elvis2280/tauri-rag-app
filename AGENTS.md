@@ -34,7 +34,13 @@ When executing tasks or generating code as an AI agent, you **MUST** adhere to t
 - Prefer targeted additions, small component extracts, and single-responsibility changes.
 - Ensure every change leaves the codebase in a compilable, test-passing state.
 
-### C. Type Safety & Strict Boundaries
+### C. Static Constants
+- Store static configuration values such as formats, option collections, labels, messages, limits, mappings, and reusable defaults in a feature-specific file under `src/constants/`.
+- Group constants by domain, for example `src/constants/upload.ts`, instead of using one application-wide constants file.
+- Export constants with descriptive `UPPER_SNAKE_CASE` names.
+- Keep runtime-derived values, component state, handlers, callbacks, and executable definitions close to their consumers.
+
+### D. Type Safety & Strict Boundaries
 - **No `any` or `unknown` casts** without explicit justification.
 - Keep Zustand state types, TanStack Query keys, and FastAPI request/response DTOs strictly typed.
 - Keep UI components decoupled from HTTP/IPC logic by wrapping FastAPI API calls (via Axios) or Tauri commands inside custom hooks or service layer modules.
