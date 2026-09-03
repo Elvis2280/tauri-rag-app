@@ -55,7 +55,7 @@ function createFakeClient(): FakeClient {
   return client;
 }
 
-const WS_BASE = "ws://localhost:8080/api/v1";
+const WS_BASE = "native://document-status";
 
 const mockClients: FakeClient[] = [];
 let consoleErrorSpy: ReturnType<typeof vi.spyOn>;

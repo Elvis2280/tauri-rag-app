@@ -3,9 +3,8 @@ import { toast } from "sonner";
 import { createWebSocketClient, type WebSocketClient } from "@/lib/websocket";
 import { useHistory } from "@/context/HistoryContext";
 import { FILE_STATUS, type WebSocketProgressMessage } from "@/types/FileTypes";
-import { buildWebSocketUrl } from "@/lib/env";
 
-const WS_BASE = buildWebSocketUrl("api/v1");
+const WS_BASE = "native://document-status";
 
 const clients = new Map<string, WebSocketClient>();
 const intentionallyClosed = new Set<string>();
@@ -51,7 +50,7 @@ export function useHistoryWebsocket(): void {
           pageNumber: msg.page_number ?? null,
           totalPages: msg.total_pages ?? null,
           currentStep: msg.current_step ?? null,
-          stepTotal: msg.stepTotal ?? null,
+          stepTotal: msg.stepTotal ?? msg.step_total ?? null,
           error: msg.error ?? null,
         });
 

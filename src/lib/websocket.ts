@@ -1,4 +1,4 @@
-import { buildWebSocketUrl } from '@/lib/env';
+import { watchDocument } from '@/lib/axios';
 
 enum State {
   IDLE = 'idle',
@@ -11,7 +11,7 @@ enum State {
 type MessageHandler = (message: unknown) => void;
 type StateHandler = (state: string) => void;
 
-export const WS_URL = buildWebSocketUrl('ws');
+export const WS_URL = '';
 
 export type WebSocketClient = {
   connect(): void;
@@ -22,131 +22,61 @@ export type WebSocketClient = {
   onStateChange(handler: StateHandler): () => void;
 };
 
-type WebSocketClientOptions = {
-  reconnect?: boolean;
-};
+type WebSocketClientOptions = { reconnect?: boolean };
+
+function documentIdFromUrl(url: string): string {
+  const marker = '/documents/';
+  const start = url.lastIndexOf(marker);
+  const suffix = start >= 0 ? url.slice(start + marker.length) : '';
+  return suffix.endsWith('/ws') ? suffix.slice(0, -3) : '';
+}
 
 function createWebSocketClient(
   url: string,
-  options?: WebSocketClientOptions,
+  _options?: WebSocketClientOptions,
 ): WebSocketClient {
-  const { reconnect: reconnectEnabled = true } = options ?? {};
-  let socket: WebSocket | null = null;
   let state: string = State.IDLE;
-  let reconnectAttempts = 0;
-  const maxReconnectAttempts = 5;
-  const reconnectDelay = 10_000;
-  let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
-  let disconnectRequested = false;
-
+  let nativeClient: { disconnect: () => void } | null = null;
   const messageHandlers = new Set<MessageHandler>();
   const stateHandlers = new Set<StateHandler>();
+  const fileId = documentIdFromUrl(url);
 
-  function setState(newState: string) {
-    state = newState;
-    for (const h of stateHandlers) h(state);
-  }
-
-  function clearReconnectTimer() {
-    if (reconnectTimer !== null) {
-      clearTimeout(reconnectTimer);
-      reconnectTimer = null;
-    }
-  }
-
-  function scheduleReconnect() {
-    if (!reconnectEnabled) return;
-    if (disconnectRequested) return;
-    if (reconnectAttempts >= maxReconnectAttempts) return;
-
-    clearReconnectTimer();
-    reconnectTimer = setTimeout(() => {
-      reconnectTimer = null;
-      reconnectAttempts++;
-      setState(State.CONNECTING);
-      attachSocket(new WebSocket(url));
-    }, reconnectDelay);
-  }
-
-  function attachSocket(ws: WebSocket) {
-    socket = ws;
-
-    ws.onopen = () => {
-      reconnectAttempts = 0;
-      setState(State.OPEN);
-    };
-
-    ws.onmessage = (event: MessageEvent) => {
-      let parsed: unknown;
-      try {
-        parsed = JSON.parse(event.data as string);
-      } catch {
-        parsed = event.data;
-      }
-      for (const h of messageHandlers) h(parsed);
-    };
-
-    ws.onerror = () => {
-      setState(State.ERROR);
-    };
-
-    ws.onclose = () => {
-      socket = null;
-      setState(State.CLOSED);
-      scheduleReconnect();
-    };
+  function setState(nextState: string) {
+    state = nextState;
+    for (const handler of stateHandlers) handler(state);
   }
 
   function connect() {
-    disconnectRequested = false;
-    if (state === State.OPEN || state === State.CONNECTING) return;
+    if (!fileId || state === State.OPEN || state === State.CONNECTING) {
+      if (!fileId) setState(State.ERROR);
+      return;
+    }
 
-    clearReconnectTimer();
-    reconnectAttempts = 0;
     setState(State.CONNECTING);
-    attachSocket(new WebSocket(url));
+    nativeClient = watchDocument(
+      fileId,
+      (payload) => {
+        setState(State.OPEN);
+        for (const handler of messageHandlers) handler(payload);
+      },
+      () => setState(State.ERROR),
+    );
+    setState(State.OPEN);
   }
 
   function disconnect() {
-    disconnectRequested = true;
-    clearReconnectTimer();
-    reconnectAttempts = 0;
-
-    if (socket) {
-      socket.onopen = null;
-      socket.onmessage = null;
-      socket.onerror = null;
-      socket.onclose = null;
-      socket.close();
-      socket = null;
-    }
-
+    nativeClient?.disconnect();
+    nativeClient = null;
     setState(State.CLOSED);
   }
 
   function subscribe(handler: MessageHandler): () => void {
     messageHandlers.add(handler);
-    return () => {
-      messageHandlers.delete(handler);
-    };
+    return () => messageHandlers.delete(handler);
   }
 
-  function send(payload: unknown): void {
-    if (state !== State.OPEN || !socket) {
-      throw new Error('WebSocket is not open');
-    }
-    socket.send(JSON.stringify(payload));
-  }
-
-  function getState(): string {
-    return state;
-  }
-
-  function onStateChange(handler: StateHandler): () => void {
-    stateHandlers.add(handler);
-    return () => {
-      stateHandlers.delete(handler);
-    };
+  function send(_payload: unknown): void {
+    throw new Error('Document status WebSockets are receive-only');
   }
 
   return {
@@ -154,17 +84,18 @@ function createWebSocketClient(
     disconnect,
     subscribe,
     send,
-    getState,
-    onStateChange,
+    getState: () => state,
+    onStateChange: (handler) => {
+      stateHandlers.add(handler);
+      return () => stateHandlers.delete(handler);
+    },
   };
 }
 
 let client: WebSocketClient | null = null;
 
 export function getWebSocket(): WebSocketClient {
-  if (client === null) {
-    client = createWebSocketClient(WS_URL, { reconnect: true });
-  }
+  if (!client) client = createWebSocketClient(WS_URL, { reconnect: true });
   return client;
 }
 

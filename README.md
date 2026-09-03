@@ -4,7 +4,9 @@ This template should help get you started developing with Tauri, React and Types
 
 ## Environment
 
-Copy `.env.example` to `.env` and configure the backend addresses. Vite loads these values automatically when commands run through pnpm.
+Copy `.env.example` to `.env` and configure the backend addresses. These values
+are compiled into the native transport; the API key is entered by each user at
+runtime and stored in the OS credential vault.
 
 ```sh
 cp .env.example .env
@@ -26,7 +28,10 @@ The GitHub Actions release workflow builds these files:
 - Windows x86 NSIS installer
 - Universal macOS DMG for Intel and Apple Silicon
 
-Configure the repository variables `VITE_API_BASE_URL` and `VITE_WS_BASE_URL` before releasing.
+Before releasing, configure the repository variables `VITE_API_BASE_URL` and
+`VITE_WS_BASE_URL`. The workflow stops before packaging if either address is
+missing. Do not configure an API key in GitHub Actions; users enter it at
+runtime.
 
 To publish a release, keep the versions in `package.json`, `src-tauri/tauri.conf.json`, and `src-tauri/Cargo.toml` synchronized, then push a matching tag:
 

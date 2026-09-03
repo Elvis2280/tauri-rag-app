@@ -21,6 +21,10 @@ export function extractApiErrorMessage(err: unknown, fallback: string): string {
       return data.message;
     }
 
+    if (data && typeof data.details === "string") {
+      return data.details;
+    }
+
     if (typeof err.message === "string") {
       return err.message;
     }

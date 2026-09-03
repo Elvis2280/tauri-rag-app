@@ -37,13 +37,13 @@ export default function FileStatusItem({
   file_id,
   message,
   status,
-  step,
   pageNumber,
   totalPages,
+  currentStep,
   stepTotal,
 }: FileStatusItemProps) {
   const stepStage =
-    `${step} / ${stepTotal}`
+    `${currentStep} / ${stepTotal}`
   const messagePart = message != null ? message : null;
   const pagePart =
     pageNumber != null && totalPages != null
@@ -53,7 +53,7 @@ export default function FileStatusItem({
     .filter(Boolean)
     .join(" · ");
 
-  const progress = getProgressPercentage(step, stepTotal);
+  const progress = getProgressPercentage(currentStep, stepTotal);
   const showProgress = progress !== null && status !== FILE_STATUS.FAILED;
 
 
@@ -70,7 +70,7 @@ export default function FileStatusItem({
           aria-valuemin={0}
           aria-valuenow={progress}
           aria-valuetext={`${Math.round(20)}% complete`}
-          className="pointer-events-none absolute h-full top-0 left-0 bg-primary/10 transition-[width] duration-300 ease-out z-30"
+          className="pointer-events-none absolute h-full top-0 left-0 bg-primary/15 transition-[width] duration-300 ease-out z-30"
           role="progressbar"
           style={{ width: `${progress}%` }}
           />

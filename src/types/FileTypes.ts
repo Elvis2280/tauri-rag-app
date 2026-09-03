@@ -22,6 +22,7 @@ export type WebSocketProgressMessage = {
   total_pages: number | null;
   current_step: number | null;
   stepTotal: number | null;
+  step_total?: number | null;
   result: Array<Record<string, unknown>> | null;
   error: string | null;
   timestamp: string;

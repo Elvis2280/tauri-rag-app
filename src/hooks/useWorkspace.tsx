@@ -1,9 +1,8 @@
 import { useCallback, useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { AxiosError } from "axios";
 import { toast } from "sonner";
 import { useGlobalContext } from "@/context/GlobalContext";
-import apiRag from "@/lib/axios";
+import apiRag, { type ApiError } from "@/lib/axios";
 import { WORKSPACE_ENDPOINTS } from "@/lib/api/endpoints";
 import { extractApiErrorMessage } from "@/lib/api/errors";
 import {
@@ -32,8 +31,8 @@ const WORKSPACE_TREE_ERROR = "Failed to load workspace tree";
 const CREATE_WORKSPACE_ERROR = "Failed to create workspace";
 const DISABLE_WORKSPACE_ERROR = "Failed to disable workspace";
 
-type CreateWorkspaceApiError = AxiosError<WorkspaceValidationErrorResponse>;
-type DisableWorkspaceApiError = AxiosError<DisableWorkspaceErrorResponse>;
+type CreateWorkspaceApiError = ApiError & { response: ApiError["response"] & { data: WorkspaceValidationErrorResponse } };
+type DisableWorkspaceApiError = ApiError & { response: ApiError["response"] & { data: DisableWorkspaceErrorResponse } };
 
 type WorkspaceQueryResult<TData> = {
   data: TData;

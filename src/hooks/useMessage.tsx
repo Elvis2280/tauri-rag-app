@@ -1,8 +1,7 @@
 import { useCallback } from "react";
 import { useMutation } from "@tanstack/react-query";
-import type { AxiosError } from "axios";
 import { toast } from "sonner";
-import apiRag from "@/lib/axios";
+import apiRag, { type ApiError } from "@/lib/axios";
 import { CHAT_ENDPOINTS } from "@/lib/api/endpoints";
 import { extractApiErrorMessage } from "@/lib/api/errors";
 import { useChatStore } from "@/context/chatStore";
@@ -19,7 +18,7 @@ type SendMessageMutationParams = SendMessageParams & {
   userMessageId: string;
 };
 
-type SendMessageApiError = AxiosError<SendMessageErrorResponse>;
+type SendMessageApiError = ApiError & { response: ApiError["response"] & { data: SendMessageErrorResponse } };
 
 type UseMessageResult = {
   sendMessage: (params: SendMessageParams) => Promise<SendMessageSuccessResponse>;

@@ -2,8 +2,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render } from "@testing-library/react";
 import App from "@/App";
 import { useWorkspaceList } from "@/hooks/useWorkspace";
+import { useCredential } from "@/hooks/useCredential";
 
 vi.mock("@/hooks/useWorkspace", () => ({ useWorkspaceList: vi.fn() }));
+vi.mock("@/hooks/useCredential", () => ({ useCredential: vi.fn() }));
 vi.mock("@/components/common/Layout", () => ({
   default: () => null,
 }));
@@ -24,9 +26,18 @@ vi.mock("@/components/ui/sonner", () => ({
 }));
 
 const mockedUseWorkspaceList = vi.mocked(useWorkspaceList);
+const mockedUseCredential = vi.mocked(useCredential);
 
 describe("App workspace bootstrap", () => {
   beforeEach(() => {
+    mockedUseCredential.mockReturnValue({
+      loading: false,
+      configured: true,
+      error: null,
+      configure: vi.fn(),
+      clear: vi.fn(),
+      refresh: vi.fn(),
+    });
     mockedUseWorkspaceList.mockReturnValue({
       data: [],
       loading: false,

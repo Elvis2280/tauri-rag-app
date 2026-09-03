@@ -14,23 +14,19 @@ export const API_BASE_URL = normalizeBaseUrl(
   DEFAULT_API_BASE_URL,
 );
 
-export const API_KEY = normalizeBaseUrl(import.meta.env.VITE_API_KEY, '');
-
 export const WS_BASE_URL = normalizeBaseUrl(
   import.meta.env.VITE_WS_BASE_URL,
   DEFAULT_WS_BASE_URL,
 );
 
 export function buildWebSocketUrl(path: string): string {
-  if (!path || !API_KEY) {
-    throw new Error('No path or API key provided...');
+  if (!path) {
+    throw new Error('No path provided...');
   }
 
   const baseURL = `${WS_BASE_URL.replace(/\/+$/, '')}/`;
   const normalizedPath = path.replace(/^\/+/, '');
   const url = new URL(normalizedPath, baseURL);
-
-  url.searchParams.set('api_key', API_KEY);
 
   return url.toString();
 }
