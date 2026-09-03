@@ -34,7 +34,6 @@ export const useHistory = create<State & Actions>()(
                     stage: null,
                     pageNumber: null,
                     totalPages: null,
-                    currentStep: null,
                     stepTotal: null,
                     error: null,
                   },

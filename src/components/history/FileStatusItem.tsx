@@ -17,33 +17,33 @@ function getCardTint(status: statusFileType): string {
 }
 
 function getProgressPercentage(
-  currentStep: number | null | undefined,
+  step: number | null | undefined,
   stepTotal: number | null | undefined,
 ): number | null {
   if (
-    currentStep == null ||
+    step == null ||
     stepTotal == null ||
-    !Number.isFinite(currentStep) ||
+    !Number.isFinite(step) ||
     !Number.isFinite(stepTotal) ||
     stepTotal <= 0
   ) {
     return null;
   }
 
-  return Math.min(100, Math.max(0, (currentStep / stepTotal) * 100));
+  return Math.min(100, Math.max(0, (step / stepTotal) * 100));
 }
 
 export default function FileStatusItem({
   file_id,
   message,
   status,
+  step,
   pageNumber,
   totalPages,
-  currentStep,
   stepTotal,
 }: FileStatusItemProps) {
   const stepStage =
-    `${currentStep} / ${stepTotal}`
+    step != null && stepTotal != null ? `${step} / ${stepTotal}` : null;
   const messagePart = message != null ? message : null;
   const pagePart =
     pageNumber != null && totalPages != null
@@ -53,9 +53,8 @@ export default function FileStatusItem({
     .filter(Boolean)
     .join(" · ");
 
-  const progress = getProgressPercentage(currentStep, stepTotal);
+  const progress = getProgressPercentage(step, stepTotal);
   const showProgress = progress !== null && status !== FILE_STATUS.FAILED;
-
 
   return (
     <Item
@@ -69,11 +68,11 @@ export default function FileStatusItem({
           aria-valuemax={100}
           aria-valuemin={0}
           aria-valuenow={progress}
-          aria-valuetext={`${Math.round(20)}% complete`}
-          className="pointer-events-none absolute h-full top-0 left-0 bg-primary/15 transition-[width] duration-300 ease-out z-30"
+          aria-valuetext={`${Math.round(progress)}% complete`}
+          className="pointer-events-none absolute inset-y-0 left-0 z-0 bg-primary/10 transition-[width] duration-300 ease-out"
           role="progressbar"
           style={{ width: `${progress}%` }}
-          />
+        />
       )}
       <ItemContent className="relative z-10 cursor-default overflow-hidden">
         <ItemTitle title={file_id}>{file_id}</ItemTitle>

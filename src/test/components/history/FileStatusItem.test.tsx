@@ -9,7 +9,7 @@ describe("FileStatusItem", () => {
     // 1. ARRANGE
     const entry = buildHistoryEntry({
       status: FILE_STATUS.OCR_STARTED,
-      currentStep: 3,
+      step: 3,
       stepTotal: 10,
     });
 
@@ -22,14 +22,15 @@ describe("FileStatusItem", () => {
     });
     expect(progress).toHaveAttribute("aria-valuenow", "30");
     expect(progress).toHaveStyle({ width: "30%" });
-    expect(progress).toHaveClass("bg-primary/15");
+    expect(progress).toHaveClass("bg-primary/10");
+    expect(progress).toHaveAttribute("aria-valuetext", "30% complete");
   });
 
   it("fills the card completely when the current step reaches the total", () => {
     // 1. ARRANGE
     const entry = buildHistoryEntry({
       status: FILE_STATUS.COMPLETED,
-      currentStep: 5,
+      step: 5,
       stepTotal: 5,
     });
 
@@ -44,7 +45,7 @@ describe("FileStatusItem", () => {
     // 1. ARRANGE
     const entry = buildHistoryEntry({
       status: FILE_STATUS.OCR_STARTED,
-      currentStep: 12,
+      step: 12,
       stepTotal: 10,
     });
 
@@ -59,7 +60,7 @@ describe("FileStatusItem", () => {
     // 1. ARRANGE
     const entry = buildHistoryEntry({
       status: FILE_STATUS.OCR_STARTED,
-      currentStep: 2,
+      step: 2,
       stepTotal: 0,
     });
 
@@ -74,7 +75,7 @@ describe("FileStatusItem", () => {
     // 1. ARRANGE
     const entry = buildHistoryEntry({
       status: FILE_STATUS.FAILED,
-      currentStep: 4,
+      step: 4,
       stepTotal: 10,
     });
 
@@ -83,6 +84,22 @@ describe("FileStatusItem", () => {
 
     // 3. ASSERT
     expect(container.firstElementChild).toHaveClass("bg-destructive/15");
+    expect(screen.queryByRole("progressbar")).not.toBeInTheDocument();
+  });
+
+  it("does not render a null step label when only the total is known", () => {
+    // 1. ARRANGE
+    const entry = buildHistoryEntry({
+      step: null,
+      stepTotal: 12,
+    });
+
+    // 2. ACT
+    render(<FileStatusItem {...entry} />);
+
+    // 3. ASSERT
+    expect(screen.getByText(entry.message!)).toBeInTheDocument();
+    expect(screen.queryByText(/null \/ 12/i)).not.toBeInTheDocument();
     expect(screen.queryByRole("progressbar")).not.toBeInTheDocument();
   });
 });

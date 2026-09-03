@@ -1,4 +1,5 @@
 import { FormEvent, useState } from 'react';
+import { X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 type ApiAccessScreenProps = {
@@ -6,6 +7,7 @@ type ApiAccessScreenProps = {
   vaultError: string | null;
   apiBaseUrl?: string;
   onConfigure: (apiKey: string) => Promise<void>;
+  onClose: () => void;
 };
 
 export default function ApiAccessScreen({
@@ -13,6 +15,7 @@ export default function ApiAccessScreen({
   vaultError,
   apiBaseUrl,
   onConfigure,
+  onClose,
 }: ApiAccessScreenProps) {
   const [apiKey, setApiKey] = useState('');
   const [saving, setSaving] = useState(false);
@@ -43,11 +46,21 @@ export default function ApiAccessScreen({
   return (
     <main className="flex min-h-screen items-center justify-center bg-background p-6 text-foreground">
       <form
-        className="w-full max-w-md space-y-5 rounded-lg border border-border bg-card p-6 shadow-lg"
+        className="relative w-full max-w-md space-y-5 rounded-lg border border-border bg-card p-6 shadow-lg"
         onSubmit={handleSubmit}
       >
+        <Button
+          aria-label="Close API access"
+          className="absolute right-3 top-3"
+          onClick={onClose}
+          size="icon-xs"
+          type="button"
+          variant="ghost"
+        >
+          <X aria-hidden="true" />
+        </Button>
         <div className="space-y-2">
-          <h1 className="text-xl font-semibold">Connect to RAG API</h1>
+          <h1 className="pr-8 text-xl font-semibold">Connect to RAG API</h1>
           <p className="text-sm text-muted-foreground">
             Enter the temporary access key from your administrator. It is saved
             only in this computer&apos;s secure credential store.

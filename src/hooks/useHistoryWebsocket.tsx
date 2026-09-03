@@ -45,12 +45,12 @@ export function useHistoryWebsocket(): void {
           status: msg.status,
           message: msg.message ?? null,
           timestamp: msg.timestamp ?? current?.timestamp ?? new Date().toISOString(),
-          step: msg.step ?? null,
+          step: msg.step ?? current?.step ?? null,
           stage: msg.stage ?? null,
           pageNumber: msg.page_number ?? null,
           totalPages: msg.total_pages ?? null,
-          currentStep: msg.current_step ?? null,
-          stepTotal: msg.stepTotal ?? msg.step_total ?? null,
+          stepTotal:
+            msg.step_total ?? msg.stepTotal ?? current?.stepTotal ?? null,
           error: msg.error ?? null,
         });
 

@@ -11,7 +11,12 @@ describe('ApiAccessScreen', () => {
     const apiKey = faker.string.alphanumeric({ length: 32 });
     const onConfigure = vi.fn().mockResolvedValue(undefined);
     render(
-      <ApiAccessScreen error={null} vaultError={null} onConfigure={onConfigure} />,
+      <ApiAccessScreen
+        error={null}
+        vaultError={null}
+        onClose={vi.fn()}
+        onConfigure={onConfigure}
+      />,
     );
 
     // 2. ACT
@@ -28,7 +33,12 @@ describe('ApiAccessScreen', () => {
     const user = userEvent.setup();
     const onConfigure = vi.fn();
     render(
-      <ApiAccessScreen error={null} vaultError={null} onConfigure={onConfigure} />,
+      <ApiAccessScreen
+        error={null}
+        vaultError={null}
+        onClose={vi.fn()}
+        onConfigure={onConfigure}
+      />,
     );
 
     // 2. ACT
@@ -49,6 +59,7 @@ describe('ApiAccessScreen', () => {
         apiBaseUrl={apiBaseUrl}
         error={null}
         vaultError={null}
+        onClose={vi.fn()}
         onConfigure={vi.fn()}
       />,
     );
@@ -56,5 +67,25 @@ describe('ApiAccessScreen', () => {
     // 3. ASSERT
     expect(screen.getByText(apiBaseUrl)).toBeInTheDocument();
     expect(screen.getByLabelText('API key')).toHaveValue('');
+  });
+
+  it('closes the API access screen from the top-right button', async () => {
+    // 1. ARRANGE
+    const user = userEvent.setup();
+    const onClose = vi.fn();
+    render(
+      <ApiAccessScreen
+        error={null}
+        vaultError={null}
+        onClose={onClose}
+        onConfigure={vi.fn()}
+      />,
+    );
+
+    // 2. ACT
+    await user.click(screen.getByRole('button', { name: 'Close API access' }));
+
+    // 3. ASSERT
+    expect(onClose).toHaveBeenCalledTimes(1);
   });
 });

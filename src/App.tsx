@@ -9,6 +9,11 @@ import ChatSection from "./components/chat/ChatSection";
 import { useWorkspaceList } from "@/hooks/useWorkspace";
 import { useCredential } from "@/hooks/useCredential";
 import ApiAccessScreen from "@/components/auth/ApiAccessScreen";
+import { getCurrentWindow } from "@tauri-apps/api/window";
+
+function closeCurrentWindow(): void {
+  void getCurrentWindow().close();
+}
 
 function App() {
   const credential = useCredential();
@@ -31,6 +36,7 @@ function App() {
         error={credentialError}
         vaultError={credential.error}
         apiBaseUrl={credential.apiBaseUrl}
+        onClose={closeCurrentWindow}
         onConfigure={async (apiKey) => {
           setCredentialError(null);
           try {

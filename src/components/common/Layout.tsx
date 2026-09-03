@@ -1,12 +1,12 @@
-import { cn } from "@/lib/utils";
-import { MessageCircleMore, FileUp, Folders, FileClock } from "lucide-react";
-import { Button } from "../ui/button";
-import { CurrentPageType } from "@/types/GlobalTypes";
-import { useLocation, useNavigate, Outlet } from "react-router";
-import { Toaster } from "@/components/ui/sonner";
-import { useHistoryWebsocket } from "@/hooks/useHistoryWebsocket";
-import { useMemo } from "react";
-import { TooltipProvider } from "../ui/tooltip";
+import { cn } from '@/lib/utils';
+import { MessageCircleMore, FileUp, Folders, FileClock } from 'lucide-react';
+import { Button } from '../ui/button';
+import { CurrentPageType } from '@/types/GlobalTypes';
+import { useLocation, useNavigate, Outlet } from 'react-router';
+import { Toaster } from '@/components/ui/sonner';
+import { useHistoryWebsocket } from '@/hooks/useHistoryWebsocket';
+import { useMemo } from 'react';
+import { TooltipProvider } from '../ui/tooltip';
 
 type navItemType = {
   path: string;
@@ -15,28 +15,30 @@ type navItemType = {
 };
 
 const NavItemsList: navItemType[] = [
-  { path: "/chat", pageName: "chat", icon: <MessageCircleMore size={20} /> },
-  { path: "/upload", pageName: "upload", icon: <FileUp size={20} /> },
-  { path: "/workspace", pageName: "workspace", icon: <Folders size={20} /> },
-  { path: "/history", pageName: "history", icon: <FileClock size={20} /> },
+  { path: '/chat', pageName: 'chat', icon: <MessageCircleMore size={20} /> },
+  { path: '/upload', pageName: 'upload', icon: <FileUp size={20} /> },
+  { path: '/workspace', pageName: 'workspace', icon: <Folders size={20} /> },
+  { path: '/history', pageName: 'history', icon: <FileClock size={20} /> },
 ];
 
 const pathToPage: Record<string, CurrentPageType> = {
-  "/": "upload",
-  "/chat": "chat",
-  "/upload": "upload",
-  "/workspace": "workspace",
-  "/history": "history",
+  '/': 'upload',
+  '/chat': 'chat',
+  '/upload': 'upload',
+  '/workspace': 'workspace',
+  '/history': 'history',
 };
 
 type LayoutProps = {
   onManageCredential?: () => void;
 };
 
-export default function Layout({ onManageCredential = () => undefined }: LayoutProps) {
+export default function Layout({
+  onManageCredential = () => undefined,
+}: LayoutProps) {
   useHistoryWebsocket();
   const navigate = useNavigate();
-  const currentSelectedPage = pathToPage[useLocation().pathname] ?? "upload";
+  const currentSelectedPage = pathToPage[useLocation().pathname] ?? 'upload';
 
   const navList = useMemo(() => {
     return NavItemsList.map((nav) => (
@@ -61,7 +63,7 @@ export default function Layout({ onManageCredential = () => undefined }: LayoutP
         <Button
           variant="ghost"
           onClick={onManageCredential}
-          className="mt-auto flex w-full items-center justify-start px-2 py-1"
+          className="mt-auto flex w-full items-center px-2 py-1 text-center justify-center"
         >
           API access
         </Button>
@@ -88,11 +90,11 @@ interface NavItemProps {
 const NavItem = ({ iconElement, label, isSelected, onClick }: NavItemProps) => {
   return (
     <Button
-      variant={"ghost"}
+      variant={'ghost'}
       onClick={onClick}
       className={cn(
-        "flex gap-2 items-center px-2 py-1 rounded cursor-pointer justify-start w-full",
-        isSelected && "bg-sidebar-accent",
+        'flex gap-2 items-center px-2 py-1 rounded cursor-pointer justify-start w-full',
+        isSelected && 'bg-sidebar-accent',
       )}
     >
       {iconElement}

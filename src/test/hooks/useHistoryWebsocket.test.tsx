@@ -130,12 +130,11 @@ describe("useHistoryWebsocket", () => {
       client.__emitMessage({
         status: FILE_STATUS.OCR_STARTED,
         file_id: entry.file_id,
-        step: "ocr",
+        step: 3,
         stage: "processing",
         message: "extracting text",
         page_number: 2,
         total_pages: 10,
-        current_step: 3,
         step_total: 10,
         result: null,
         error: null,
@@ -146,12 +145,11 @@ describe("useHistoryWebsocket", () => {
     // ASSERT
     const updated = useHistory.getState().entries[0];
     expect(updated.status).toBe(FILE_STATUS.OCR_STARTED);
-    expect(updated.step).toBe("ocr");
+    expect(updated.step).toBe(3);
     expect(updated.stage).toBe("processing");
     expect(updated.message).toBe("extracting text");
     expect(updated.pageNumber).toBe(2);
     expect(updated.totalPages).toBe(10);
-    expect(updated.currentStep).toBe(3);
     expect(updated.stepTotal).toBe(10);
   });
 
@@ -167,7 +165,8 @@ describe("useHistoryWebsocket", () => {
       client.__emitMessage({
         status: FILE_STATUS.OCR_STARTED,
         file_id: entry.file_id,
-        step: "ocr",
+        step: 2,
+        step_total: 10,
         stage: "processing",
         message: "extracting text",
         page_number: 2,
@@ -179,7 +178,7 @@ describe("useHistoryWebsocket", () => {
       client.__emitMessage({
         status: FILE_STATUS.OCR_FINISHED,
         file_id: entry.file_id,
-        step: "ocr-done",
+        step: 4,
         stage: "finished",
         message: "text extracted",
         page_number: 4,
@@ -193,7 +192,8 @@ describe("useHistoryWebsocket", () => {
     // ASSERT
     const updated = useHistory.getState().entries[0];
     expect(updated.status).toBe(FILE_STATUS.OCR_FINISHED);
-    expect(updated.step).toBe("ocr-done");
+    expect(updated.step).toBe(4);
+    expect(updated.stepTotal).toBe(10);
     expect(updated.stage).toBe("finished");
     expect(updated.message).toBe("text extracted");
     expect(updated.pageNumber).toBe(4);
@@ -212,7 +212,7 @@ describe("useHistoryWebsocket", () => {
       client.__emitMessage({
         status: FILE_STATUS.OCR_STARTED,
         file_id: faker.string.uuid(),
-        step: "ocr",
+        step: 1,
         stage: "processing",
         message: "wrong file",
         page_number: null,
@@ -242,7 +242,8 @@ describe("useHistoryWebsocket", () => {
       client.__emitMessage({
         status: FILE_STATUS.COMPLETED,
         file_id: entry.file_id,
-        step: "done",
+        step: 12,
+        step_total: 12,
         stage: "finished",
         message: "all done",
         page_number: null,
@@ -322,7 +323,8 @@ describe("useHistoryWebsocket", () => {
       client.__emitMessage({
         status: FILE_STATUS.COMPLETED,
         file_id: entry.file_id,
-        step: "done",
+        step: 12,
+        step_total: 12,
         stage: "finished",
         message: "all done",
         page_number: null,
