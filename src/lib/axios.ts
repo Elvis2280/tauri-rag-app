@@ -2,6 +2,8 @@ import { Channel, invoke } from '@tauri-apps/api/core';
 
 type NativeApiResponse<TBody = unknown> = { status: number; body: TBody };
 
+type NativeCommandError = { message: string };
+
 export type ApiErrorResponse = { status: number; data: unknown };
 
 export class ApiError extends Error {
@@ -18,6 +20,22 @@ type ApiClient = {
   get<T>(path: string): Promise<{ data: T }>;
   post<T>(path: string, body?: unknown): Promise<{ data: T }>;
 };
+
+function hasMessage(value: object): value is NativeCommandError {
+  return 'message' in value && typeof value.message === 'string';
+}
+
+export function normalizeNativeError(
+  error: unknown,
+  fallback: string,
+): Error {
+  if (error instanceof Error) return error;
+  if (typeof error === 'string') return new Error(error);
+  if (typeof error === 'object' && error !== null && hasMessage(error)) {
+    return new Error(error.message);
+  }
+  return new Error(fallback);
+}
 
 function throwForStatus(response: NativeApiResponse): void {
   if (response.status >= 400) {
@@ -79,18 +97,36 @@ export const apiRag: ApiClient = {
   },
 };
 
-export type CredentialStatus = { configured: boolean };
+export type CredentialStatus = { configured: boolean; apiBaseUrl: string };
 
-export function getCredentialStatus(): Promise<CredentialStatus> {
-  return invoke<CredentialStatus>('get_credential_status');
+export async function getCredentialStatus(): Promise<CredentialStatus> {
+  try {
+    return await invoke<CredentialStatus>('get_credential_status');
+  } catch (error) {
+    throw normalizeNativeError(
+      error,
+      'Unable to access the operating system credential vault',
+    );
+  }
 }
 
-export function saveCredential(apiKey: string): Promise<void> {
-  return invoke('validate_and_save_credential', { apiKey });
+export async function saveCredential(apiKey: string): Promise<void> {
+  try {
+    await invoke('validate_and_save_credential', { apiKey });
+  } catch (error) {
+    throw normalizeNativeError(error, 'The API key could not be validated.');
+  }
 }
 
-export function clearCredential(): Promise<void> {
-  return invoke('clear_credential');
+export async function clearCredential(): Promise<void> {
+  try {
+    await invoke('clear_credential');
+  } catch (error) {
+    throw normalizeNativeError(
+      error,
+      'Unable to remove the API credential',
+    );
+  }
 }
 
 export type NativeProgressEvent = {
@@ -111,8 +147,15 @@ export function watchDocument(
       onMessage(event.payload);
     }
   };
-  void invoke('watch_document', { fileId, channel }).catch(onError);
-  return { disconnect: () => void invoke('stop_document_watch', { fileId }) };
+  void invoke('watch_document', { fileId, channel }).catch((error: unknown) =>
+    onError(normalizeNativeError(error, 'Unable to connect to the document status stream')),
+  );
+  return {
+    disconnect: () =>
+      void invoke('stop_document_watch', { fileId }).catch((error: unknown) =>
+        onError(normalizeNativeError(error, 'Unable to stop the document status stream')),
+      ),
+  };
 }
 
 export default apiRag;

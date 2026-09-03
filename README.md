@@ -28,16 +28,17 @@ The GitHub Actions release workflow builds these files:
 - Windows x86 NSIS installer
 - Universal macOS DMG for Intel and Apple Silicon
 
-Before releasing, configure the repository variables `VITE_API_BASE_URL` and
-`VITE_WS_BASE_URL`. The workflow stops before packaging if either address is
-missing. Do not configure an API key in GitHub Actions; users enter it at
-runtime.
+Before releasing, configure the repository variables `RAG_API_BASE_URL` and
+`RAG_WS_BASE_URL`. The workflow stops before packaging if either address is
+missing. For compatibility, it temporarily falls back to the old `VITE_*`
+address variable names. Do not configure an API key in GitHub Actions; users
+enter it at runtime.
 
 To publish a release, keep the versions in `package.json`, `src-tauri/tauri.conf.json`, and `src-tauri/Cargo.toml` synchronized, then push a matching tag:
 
 ```sh
-git tag v0.2.0
-git push origin v0.2.0
+git tag v0.1.6
+git push origin v0.1.6
 ```
 
 GitHub Actions creates a draft release with the three installers attached. Test the files, then publish the draft from the repository’s Releases page. Authorized repository users can download the published installers from:

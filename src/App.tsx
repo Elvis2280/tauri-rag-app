@@ -30,6 +30,7 @@ function App() {
       <ApiAccessScreen
         error={credentialError}
         vaultError={credential.error}
+        apiBaseUrl={credential.apiBaseUrl}
         onConfigure={async (apiKey) => {
           setCredentialError(null);
           try {

@@ -38,4 +38,23 @@ describe('ApiAccessScreen', () => {
     expect(screen.getByRole('alert')).toHaveTextContent('Enter the API key');
     expect(onConfigure).not.toHaveBeenCalled();
   });
+
+  it('shows the compiled API address without showing a credential', () => {
+    // 1. ARRANGE
+    const apiBaseUrl = `http://${faker.internet.ipv4()}:${faker.number.int({ min: 1024, max: 65535 })}/api/v1`;
+
+    // 2. ACT
+    render(
+      <ApiAccessScreen
+        apiBaseUrl={apiBaseUrl}
+        error={null}
+        vaultError={null}
+        onConfigure={vi.fn()}
+      />,
+    );
+
+    // 3. ASSERT
+    expect(screen.getByText(apiBaseUrl)).toBeInTheDocument();
+    expect(screen.getByLabelText('API key')).toHaveValue('');
+  });
 });

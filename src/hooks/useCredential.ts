@@ -2,12 +2,14 @@ import { useCallback, useEffect, useState } from 'react';
 import {
   clearCredential,
   getCredentialStatus,
+  normalizeNativeError,
   saveCredential,
 } from '@/lib/axios';
 
 type CredentialState = {
   loading: boolean;
   configured: boolean;
+  apiBaseUrl: string;
   error: string | null;
 };
 
@@ -15,6 +17,7 @@ export function useCredential() {
   const [state, setState] = useState<CredentialState>({
     loading: true,
     configured: false,
+    apiBaseUrl: '',
     error: null,
   });
 
@@ -22,12 +25,21 @@ export function useCredential() {
     setState((current) => ({ ...current, loading: true, error: null }));
     try {
       const status = await getCredentialStatus();
-      setState({ loading: false, configured: status.configured, error: null });
-    } catch {
+      setState({
+        loading: false,
+        configured: status.configured,
+        apiBaseUrl: status.apiBaseUrl,
+        error: null,
+      });
+    } catch (error) {
       setState({
         loading: false,
         configured: false,
-        error: 'Unable to access the operating system credential vault',
+        apiBaseUrl: '',
+        error: normalizeNativeError(
+          error,
+          'Unable to access the operating system credential vault',
+        ).message,
       });
     }
   }, []);
@@ -38,12 +50,22 @@ export function useCredential() {
 
   const configure = useCallback(async (apiKey: string) => {
     await saveCredential(apiKey);
-    setState({ loading: false, configured: true, error: null });
+    setState((current) => ({
+      ...current,
+      loading: false,
+      configured: true,
+      error: null,
+    }));
   }, []);
 
   const clear = useCallback(async () => {
     await clearCredential();
-    setState({ loading: false, configured: false, error: null });
+    setState((current) => ({
+      ...current,
+      loading: false,
+      configured: false,
+      error: null,
+    }));
   }, []);
 
   return { ...state, configure, clear, refresh };

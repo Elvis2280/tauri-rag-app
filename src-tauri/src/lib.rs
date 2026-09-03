@@ -12,6 +12,8 @@ use tokio_tungstenite::tungstenite::client::IntoClientRequest;
 
 const KEYRING_SERVICE: &str = "com.elvis.rag-desktop";
 const KEYRING_USER: &str = "backend-api-key";
+#[cfg(target_os = "windows")]
+const KEYRING_TARGET: &str = "com.elvis.rag-desktop/backend-api-key";
 const DEFAULT_API_BASE_URL: &str = "http://localhost:8080/api/v1";
 const DEFAULT_WS_BASE_URL: &str = "ws://localhost:8080";
 const MAX_UPLOAD_BYTES: usize = 100 * 1024 * 1024;
@@ -30,23 +32,80 @@ fn ws_base_url() -> String {
         .to_string()
 }
 
-fn credential_entry() -> Result<keyring::Entry, String> {
-    keyring::Entry::new(KEYRING_SERVICE, KEYRING_USER).map_err(|error| error.to_string())
+#[cfg(target_os = "windows")]
+type CredentialEntry = keyring_core::Entry;
+
+#[cfg(not(target_os = "windows"))]
+type CredentialEntry = keyring::Entry;
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CredentialCommandError {
+    pub code: String,
+    pub message: String,
 }
 
-fn read_api_key() -> Result<String, String> {
+fn credential_error(code: &str, message: &str) -> CredentialCommandError {
+    CredentialCommandError {
+        code: code.to_string(),
+        message: message.to_string(),
+    }
+}
+
+fn map_vault_error(code: &str, error: &keyring::Error) -> CredentialCommandError {
+    if code == "vault_read" && matches!(error, keyring::Error::NoEntry) {
+        credential_error("not_configured", "API key is not configured")
+    } else {
+        credential_error(
+            code,
+            "Unable to access the operating system credential vault",
+        )
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn credential_entry() -> Result<CredentialEntry, CredentialCommandError> {
+    use keyring_core::api::CredentialStoreApi;
+    use std::collections::HashMap;
+
+    let store = windows_native_keyring_store::Store::new().map_err(|_| {
+        credential_error(
+            "vault_initialization",
+            "Unable to initialize Windows Credential Manager",
+        )
+    })?;
+    let modifiers = HashMap::from([("target", KEYRING_TARGET), ("persistence", "Local")]);
+    store
+        .build(KEYRING_SERVICE, KEYRING_USER, Some(&modifiers))
+        .map_err(|_| {
+            credential_error(
+                "vault_initialization",
+                "Unable to initialize Windows Credential Manager",
+            )
+        })
+}
+
+#[cfg(not(target_os = "windows"))]
+fn credential_entry() -> Result<CredentialEntry, CredentialCommandError> {
+    keyring::Entry::new(KEYRING_SERVICE, KEYRING_USER).map_err(|_| {
+        credential_error(
+            "vault_initialization",
+            "Unable to initialize the operating system credential vault",
+        )
+    })
+}
+
+fn read_api_key() -> Result<String, CredentialCommandError> {
     credential_entry()?
         .get_password()
-        .map_err(|error| match error {
-            keyring::Error::NoEntry => "API key is not configured".to_string(),
-            _ => "Unable to read the saved API credential".to_string(),
-        })
+        .map_err(|error| map_vault_error("vault_read", &error))
 }
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CredentialStatus {
     configured: bool,
+    api_base_url: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -112,7 +171,7 @@ async fn json_body(response: reqwest::Response) -> Result<ApiResponse, String> {
 }
 
 async fn authenticated_client() -> Result<(reqwest::Client, String), String> {
-    let key = read_api_key()?;
+    let key = read_api_key().map_err(|error| error.message)?;
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(30))
         .build()
@@ -121,52 +180,97 @@ async fn authenticated_client() -> Result<(reqwest::Client, String), String> {
 }
 
 #[tauri::command]
-async fn get_credential_status() -> Result<CredentialStatus, String> {
+async fn get_credential_status() -> Result<CredentialStatus, CredentialCommandError> {
     let configured = match credential_entry()?.get_password() {
         Ok(_) => true,
         Err(keyring::Error::NoEntry) => false,
-        Err(_) => return Err("Unable to access the operating system credential vault".to_string()),
+        Err(error) => return Err(map_vault_error("vault_read", &error)),
     };
-    Ok(CredentialStatus { configured })
+    Ok(CredentialStatus {
+        configured,
+        api_base_url: api_base_url(),
+    })
+}
+
+async fn validate_api_key(
+    client: &reqwest::Client,
+    url: &reqwest::Url,
+    key: &str,
+) -> Result<reqwest::Response, CredentialCommandError> {
+    for attempt in 0..2 {
+        match client
+            .get(url.clone())
+            .header("X-API-Key", key)
+            .send()
+            .await
+        {
+            Ok(response) => return Ok(response),
+            Err(error) if attempt == 0 && (error.is_connect() || error.is_timeout()) => {
+                tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+            }
+            Err(_) => {
+                return Err(credential_error(
+                    "connection",
+                    "Unable to reach the RAG API",
+                ));
+            }
+        }
+    }
+
+    Err(credential_error(
+        "connection",
+        "Unable to reach the RAG API",
+    ))
 }
 
 #[tauri::command]
-async fn validate_and_save_credential(api_key: String) -> Result<(), String> {
-    let key = api_key.trim();
+async fn validate_and_save_credential(api_key: String) -> Result<(), CredentialCommandError> {
+    let key = api_key.trim().to_string();
     if key.is_empty() || key.len() > 4096 {
-        return Err("Enter a valid API key".to_string());
+        return Err(credential_error("invalid_key", "Enter a valid API key"));
     }
 
-    let url = endpoint_url("workspace/list")?;
+    let url = endpoint_url("workspace/list")
+        .map_err(|_| credential_error("configuration", "Invalid configured API address"))?;
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(10))
         .build()
-        .map_err(|_| "Unable to initialize the API client".to_string())?;
-    let response = client
-        .get(url)
-        .header("X-API-Key", key)
-        .send()
-        .await
-        .map_err(|_| "Unable to reach the RAG API".to_string())?;
+        .map_err(|_| credential_error("client", "Unable to initialize the API client"))?;
+    let response = validate_api_key(&client, &url, &key).await?;
 
     if !response.status().is_success() {
         return Err(if response.status().as_u16() == 401 {
-            "The API key was rejected".to_string()
+            credential_error("rejected", "The API key was rejected")
         } else {
-            "The API did not accept this credential".to_string()
+            credential_error("backend", "The API did not accept this credential")
         });
     }
 
-    credential_entry()?
-        .set_password(key)
-        .map_err(|_| "Unable to save the API credential".to_string())
+    let entry = credential_entry()?;
+    entry
+        .set_password(&key)
+        .map_err(|error| map_vault_error("vault_write", &error))?;
+    match entry.get_password() {
+        Ok(saved_key) if saved_key == key => Ok(()),
+        Ok(_) => {
+            let _ = entry.delete_credential();
+            Err(credential_error(
+                "vault_verification",
+                "The saved API credential could not be verified",
+            ))
+        }
+        Err(error) => {
+            let _ = entry.delete_credential();
+            Err(map_vault_error("vault_verification", &error))
+        }
+    }
 }
 
 #[tauri::command]
-async fn clear_credential() -> Result<(), String> {
+async fn clear_credential() -> Result<(), CredentialCommandError> {
     match credential_entry()?.delete_credential() {
         Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
-        Err(_) => Err("Unable to remove the API credential".to_string()),
+        Err(error) => Err(map_vault_error("vault_deletion", &error)),
     }
 }
 
@@ -243,7 +347,7 @@ async fn watch_document(
     state: State<'_, AppState>,
 ) -> Result<(), String> {
     uuid::Uuid::parse_str(&file_id).map_err(|_| "Invalid document ID".to_string())?;
-    let key = read_api_key()?;
+    let key = read_api_key().map_err(|error| error.message)?;
     let mut request = format!("{}/api/v1/documents/{file_id}/ws", ws_base_url())
         .into_client_request()
         .map_err(|_| "Invalid configured WebSocket address".to_string())?;
@@ -331,5 +435,37 @@ mod tests {
         assert!(endpoint_url("admin/secrets").is_err());
         assert!(endpoint_url("workspace/not-a-uuid/disable").is_err());
         assert!(endpoint_url("workspace/../chat").is_err());
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn windows_credential_store_round_trip() {
+        use keyring_core::api::CredentialStoreApi;
+        use std::collections::HashMap;
+        use std::time::{SystemTime, UNIX_EPOCH};
+
+        let suffix = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system clock should be available")
+            .as_nanos();
+        let target = format!("rag-desktop-smoke-{suffix}");
+        let secret = format!("smoke-secret-{suffix}");
+        let store = windows_native_keyring_store::Store::new()
+            .expect("Windows Credential Manager should initialize");
+        let modifiers = HashMap::from([("target", target.as_str()), ("persistence", "Local")]);
+        let entry = store
+            .build("rag-desktop-smoke", "test-user", Some(&modifiers))
+            .expect("credential entry should be created");
+
+        entry
+            .set_password(&secret)
+            .expect("credential should be written");
+        assert_eq!(
+            entry.get_password().expect("credential should be readable"),
+            secret
+        );
+        entry
+            .delete_credential()
+            .expect("credential should be deleted");
     }
 }

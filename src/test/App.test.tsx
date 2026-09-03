@@ -33,6 +33,7 @@ describe("App workspace bootstrap", () => {
     mockedUseCredential.mockReturnValue({
       loading: false,
       configured: true,
+      apiBaseUrl: "",
       error: null,
       configure: vi.fn(),
       clear: vi.fn(),

@@ -10,7 +10,11 @@ vi.mock('@tauri-apps/api/core', () => ({
   invoke: invokeMock,
 }));
 
-import apiRag, { ApiError } from '@/lib/axios';
+import apiRag, {
+  ApiError,
+  normalizeNativeError,
+  saveCredential,
+} from '@/lib/axios';
 
 describe('native API client', () => {
   it('sends typed JSON requests through Tauri without exposing credentials', async () => {
@@ -44,5 +48,33 @@ describe('native API client', () => {
     await expect(request).rejects.toMatchObject({
       response: { status: 401, data: { detail: details } },
     });
+  });
+
+  it('normalizes Tauri string and object rejections without exposing extra data', () => {
+    // 1. ARRANGE
+    const nativeMessage = faker.lorem.sentence();
+
+    // 2. ACT
+    const stringError = normalizeNativeError(nativeMessage, faker.lorem.sentence());
+    const objectError = normalizeNativeError(
+      { code: faker.word.noun(), message: nativeMessage },
+      faker.lorem.sentence(),
+    );
+
+    // 3. ASSERT
+    expect(stringError).toEqual(new Error(nativeMessage));
+    expect(objectError).toEqual(new Error(nativeMessage));
+  });
+
+  it('preserves the native credential error when Tauri rejects with a string', async () => {
+    // 1. ARRANGE
+    const nativeMessage = faker.lorem.sentence();
+    invokeMock.mockRejectedValueOnce(nativeMessage);
+
+    // 2. ACT
+    const request = saveCredential(faker.string.alphanumeric({ length: 32 }));
+
+    // 3. ASSERT
+    await expect(request).rejects.toThrow(nativeMessage);
   });
 });

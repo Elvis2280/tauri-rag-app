@@ -2958,11 +2958,12 @@ checksum = "f8dcc9c7d52a811697d2151c701e0d08956f92b0e24136cf4cf27b57a6a0d9bf"
 
 [[package]]
 name = "rag-desktop"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "base64 0.22.1",
  "futures-util",
  "keyring",
+ "keyring-core",
  "reqwest 0.12.28",
  "serde",
  "serde_json",
@@ -2973,6 +2974,7 @@ dependencies = [
  "tokio",
  "tokio-tungstenite",
  "uuid",
+ "windows-native-keyring-store",
 ]
 
 [[package]]

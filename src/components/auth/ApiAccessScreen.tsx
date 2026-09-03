@@ -4,12 +4,14 @@ import { Button } from '@/components/ui/button';
 type ApiAccessScreenProps = {
   error: string | null;
   vaultError: string | null;
+  apiBaseUrl?: string;
   onConfigure: (apiKey: string) => Promise<void>;
 };
 
 export default function ApiAccessScreen({
   error,
   vaultError,
+  apiBaseUrl,
   onConfigure,
 }: ApiAccessScreenProps) {
   const [apiKey, setApiKey] = useState('');
@@ -50,6 +52,11 @@ export default function ApiAccessScreen({
             Enter the temporary access key from your administrator. It is saved
             only in this computer&apos;s secure credential store.
           </p>
+          {apiBaseUrl && (
+            <p className="text-xs text-muted-foreground">
+              API server: <span className="font-mono">{apiBaseUrl}</span>
+            </p>
+          )}
         </div>
         <label className="block space-y-2 text-sm font-medium" htmlFor="api-key">
           API key
