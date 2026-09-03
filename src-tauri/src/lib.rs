@@ -52,6 +52,19 @@ fn credential_error(code: &str, message: &str) -> CredentialCommandError {
     }
 }
 
+fn api_validation_error(status: u16) -> CredentialCommandError {
+    if matches!(status, 401 | 403) {
+        credential_error("rejected", "The API key was rejected")
+    } else if status == 404 {
+        credential_error(
+            "configuration",
+            "The API endpoint was not found; check that the address ends in /api/v1",
+        )
+    } else {
+        credential_error("backend", &format!("The API returned HTTP {status}"))
+    }
+}
+
 fn map_vault_error(code: &str, error: &keyring::Error) -> CredentialCommandError {
     if code == "vault_read" && matches!(error, keyring::Error::NoEntry) {
         credential_error("not_configured", "API key is not configured")
@@ -239,11 +252,7 @@ async fn validate_and_save_credential(api_key: String) -> Result<(), CredentialC
     let response = validate_api_key(&client, &url, &key).await?;
 
     if !response.status().is_success() {
-        return Err(if response.status().as_u16() == 401 {
-            credential_error("rejected", "The API key was rejected")
-        } else {
-            credential_error("backend", "The API did not accept this credential")
-        });
+        return Err(api_validation_error(response.status().as_u16()));
     }
 
     let entry = credential_entry()?;
@@ -420,7 +429,7 @@ pub fn run() {
 
 #[cfg(test)]
 mod tests {
-    use super::endpoint_url;
+    use super::{api_validation_error, endpoint_url};
 
     #[test]
     fn endpoint_allowlist_accepts_supported_routes() {
@@ -435,6 +444,30 @@ mod tests {
         assert!(endpoint_url("admin/secrets").is_err());
         assert!(endpoint_url("workspace/not-a-uuid/disable").is_err());
         assert!(endpoint_url("workspace/../chat").is_err());
+    }
+
+    #[test]
+    fn api_validation_statuses_are_mapped_without_sensitive_data() {
+        // 1. ARRANGE
+        let cases = [
+            (401, "rejected", "The API key was rejected"),
+            (403, "rejected", "The API key was rejected"),
+            (404, "configuration", "The API endpoint was not found"),
+            (503, "backend", "The API returned HTTP 503"),
+        ];
+
+        // 2. ACT
+        let errors = cases
+            .iter()
+            .map(|(status, _, _)| api_validation_error(*status))
+            .collect::<Vec<_>>();
+
+        // 3. ASSERT
+        for ((_, expected_code, expected_message), error) in cases.iter().zip(errors) {
+            assert_eq!(&error.code, expected_code);
+            assert!(error.message.contains(expected_message));
+            assert!(!error.message.contains("X-API-Key"));
+        }
     }
 
     #[cfg(target_os = "windows")]

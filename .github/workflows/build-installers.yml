@@ -29,8 +29,8 @@ jobs:
             args: --target universal-apple-darwin --bundles dmg
 
     env:
-      RAG_API_BASE_URL: ${{ vars.RAG_API_BASE_URL || vars.VITE_API_BASE_URL }}
-      RAG_WS_BASE_URL: ${{ vars.RAG_WS_BASE_URL || vars.VITE_WS_BASE_URL }}
+      RAG_API_BASE_URL: ${{ vars.RAG_API_BASE_URL }}
+      RAG_WS_BASE_URL: ${{ vars.RAG_WS_BASE_URL }}
 
     steps:
       - name: Checkout
@@ -75,8 +75,28 @@ jobs:
       - name: Validate build environment
         shell: bash
         run: |
-          test -n "$RAG_API_BASE_URL" || { echo "RAG_API_BASE_URL is not configured"; exit 1; }
-          test -n "$RAG_WS_BASE_URL" || { echo "RAG_WS_BASE_URL is not configured"; exit 1; }
+          node <<'NODE'
+          const api = process.env.RAG_API_BASE_URL;
+          const ws = process.env.RAG_WS_BASE_URL;
+          if (!api || !ws) throw new Error("RAG_API_BASE_URL and RAG_WS_BASE_URL are required");
+
+          const apiUrl = new URL(api);
+          if (!['http:', 'https:'].includes(apiUrl.protocol) ||
+              apiUrl.pathname.replace(/\/+$/, '') !== '/api/v1' ||
+              apiUrl.username || apiUrl.password || apiUrl.search || apiUrl.hash) {
+            throw new Error("RAG_API_BASE_URL must be an HTTP(S) URL ending in /api/v1");
+          }
+
+          const wsUrl = new URL(ws);
+          if (!['ws:', 'wss:'].includes(wsUrl.protocol) ||
+              wsUrl.pathname !== '/' || wsUrl.username || wsUrl.password ||
+              wsUrl.search || wsUrl.hash) {
+            throw new Error("RAG_WS_BASE_URL must be a WS(S) origin without a path");
+          }
+
+          console.log(`Validated API origin: ${apiUrl.origin}${apiUrl.pathname}`);
+          console.log(`Validated WebSocket origin: ${wsUrl.origin}`);
+          NODE
 
       - name: Test Windows credential store
         if: runner.os == 'Windows'

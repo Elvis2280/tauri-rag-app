@@ -1,11 +1,10 @@
 fn main() {
     println!("cargo:rerun-if-changed=../.env");
+    println!("cargo:rerun-if-env-changed=RAG_API_BASE_URL");
+    println!("cargo:rerun-if-env-changed=RAG_WS_BASE_URL");
     let env_aliases = [
-        (
-            "RAG_API_BASE_URL",
-            ["RAG_API_BASE_URL", "VITE_API_BASE_URL"],
-        ),
-        ("RAG_WS_BASE_URL", ["RAG_WS_BASE_URL", "VITE_WS_BASE_URL"]),
+        ("RAG_API_BASE_URL", ["RAG_API_BASE_URL"]),
+        ("RAG_WS_BASE_URL", ["RAG_WS_BASE_URL"]),
     ];
     let file_values = std::fs::read_to_string("../.env").ok().map(|contents| {
         contents
