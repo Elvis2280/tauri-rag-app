@@ -9,10 +9,12 @@ const WS_BASE = "native://document-status";
 const clients = new Map<string, WebSocketClient>();
 const intentionallyClosed = new Set<string>();
 
-export function useHistoryWebsocket(): void {
+export function useHistoryWebsocket(enabled = true): void {
   const entries = useHistory((s) => s.entries);
 
   useEffect(() => {
+    if (!enabled) return;
+
     for (const entry of entries) {
       if (clients.has(entry.file_id)) continue;
       if (
@@ -103,7 +105,7 @@ export function useHistoryWebsocket(): void {
       clients.set(entry.file_id, client);
       client.connect();
     }
-  }, [entries]);
+  }, [enabled, entries]);
 
   useEffect(() => {
     return () => {

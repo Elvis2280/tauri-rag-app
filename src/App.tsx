@@ -1,77 +1,80 @@
 import { useState } from "react";
-import { HashRouter, Routes, Route } from "react-router";
-import { Toaster } from "./components/ui/sonner";
-import Layout from "./components/common/Layout";
-import UploadSection from "./components/upload/UploadSection";
-import WorkspacePage from "./components/workspace/WorkspacePage";
-import HistorySection from "./components/history/HistorySection";
-import ChatSection from "./components/chat/ChatSection";
-import { useWorkspaceList } from "@/hooks/useWorkspace";
-import { useCredential } from "@/hooks/useCredential";
-import ApiAccessScreen from "@/components/auth/ApiAccessScreen";
+import { HashRouter, Route, Routes } from "react-router";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
+import ApiAccessModal from "@/components/auth/ApiAccessModal";
+import ChatSection from "@/components/chat/ChatSection";
+import Layout from "@/components/common/Layout";
+import HistorySection from "@/components/history/HistorySection";
+import { Toaster } from "@/components/ui/sonner";
+import UploadSection from "@/components/upload/UploadSection";
+import WorkspacePage from "@/components/workspace/WorkspacePage";
+import { useApiAccess } from "@/hooks/useApiAccess";
+import { useWorkspaceList, workspaceKeys } from "@/hooks/useWorkspace";
 
 function closeCurrentWindow(): void {
   void getCurrentWindow().close();
 }
 
 function App() {
-  const credential = useCredential();
-  const [credentialError, setCredentialError] = useState<string | null>(null);
+  const access = useApiAccess();
 
-  if (credential.loading) {
+  if (access.loading) {
     return (
       <main
         className="flex min-h-screen items-center justify-center bg-background text-sm text-muted-foreground"
         aria-label="Loading"
       >
-        Checking secure credential store…
+        Checking secure API access settings…
       </main>
     );
   }
 
-  if (!credential.configured) {
+  if (!access.configured) {
     return (
-      <ApiAccessScreen
-        error={credentialError}
-        vaultError={credential.error}
-        apiBaseUrl={credential.apiBaseUrl}
-        onClose={closeCurrentWindow}
-        onConfigure={async (apiKey) => {
-          setCredentialError(null);
-          try {
-            await credential.configure(apiKey);
-          } catch (error) {
-            setCredentialError(
-              error instanceof Error
-                ? error.message
-                : "The API key could not be validated.",
-            );
-            throw error;
-          }
-        }}
-      />
+      <HashRouter>
+        <Toaster />
+        <Routes>
+          <Route path="*" element={<Layout interactive={false} />} />
+        </Routes>
+        <ApiAccessModal
+          open
+          required
+          serverHost={access.serverHost}
+          statusError={access.error}
+          onOpenChange={() => undefined}
+          onCancelRequired={closeCurrentWindow}
+          onSetup={access.setup}
+          onUpdateApiKey={access.saveApiKey}
+          onUpdateServerHost={access.saveServerHost}
+        />
+      </HashRouter>
     );
   }
 
-  return <AuthenticatedApp onClearCredential={() => void credential.clear()} />;
+  return <AuthenticatedApp access={access} />;
 }
 
-function AuthenticatedApp({ onClearCredential }: { onClearCredential: () => void }) {
+type AuthenticatedAppProps = {
+  access: ReturnType<typeof useApiAccess>;
+};
+
+function AuthenticatedApp({ access }: AuthenticatedAppProps) {
+  const [apiAccessOpen, setApiAccessOpen] = useState(false);
+  const queryClient = useQueryClient();
   useWorkspaceList();
+
+  const refreshWorkspaceData = async () => {
+    await queryClient.invalidateQueries({ queryKey: workspaceKeys.all });
+  };
 
   return (
     <HashRouter>
       <Toaster />
       <Routes>
         <Route
-          element={
-            <Layout
-              onManageCredential={() => {
-                onClearCredential();
-              }}
-            />
-          }
+          element={<Layout onManageApiAccess={() => setApiAccessOpen(true)} />}
         >
           <Route path="/" element={<UploadSection />} />
           <Route path="/upload" element={<UploadSection />} />
@@ -80,6 +83,24 @@ function AuthenticatedApp({ onClearCredential }: { onClearCredential: () => void
           <Route path="/history" element={<HistorySection />} />
         </Route>
       </Routes>
+      <ApiAccessModal
+        open={apiAccessOpen}
+        serverHost={access.serverHost}
+        statusError={access.error}
+        onOpenChange={setApiAccessOpen}
+        onCancelRequired={closeCurrentWindow}
+        onSetup={access.setup}
+        onUpdateApiKey={async (apiKey) => {
+          await access.saveApiKey(apiKey);
+          await refreshWorkspaceData();
+          toast.success("API key updated");
+        }}
+        onUpdateServerHost={async (serverHost) => {
+          await access.saveServerHost(serverHost);
+          await refreshWorkspaceData();
+          toast.success("Server host updated");
+        }}
+      />
     </HashRouter>
   );
 }

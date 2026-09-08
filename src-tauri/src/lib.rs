@@ -1,12 +1,15 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
+mod access;
+
+use access::{normalize_server_host, AccessConfig, AccessSettingsStore};
 use base64::Engine;
 use futures_util::StreamExt;
 use reqwest::multipart::{Form, Part};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use tauri::{ipc::Channel, State};
+use tauri::{ipc::Channel, Manager, State};
 use tokio::sync::Mutex;
 use tokio_tungstenite::tungstenite::client::IntoClientRequest;
 
@@ -14,23 +17,7 @@ const KEYRING_SERVICE: &str = "com.elvis.rag-desktop";
 const KEYRING_USER: &str = "backend-api-key";
 #[cfg(target_os = "windows")]
 const KEYRING_TARGET: &str = "com.elvis.rag-desktop/backend-api-key";
-const DEFAULT_API_BASE_URL: &str = "http://localhost:8080/api/v1";
-const DEFAULT_WS_BASE_URL: &str = "ws://localhost:8080";
 const MAX_UPLOAD_BYTES: usize = 100 * 1024 * 1024;
-
-fn api_base_url() -> String {
-    option_env!("RAG_API_BASE_URL")
-        .unwrap_or(DEFAULT_API_BASE_URL)
-        .trim_end_matches('/')
-        .to_string()
-}
-
-fn ws_base_url() -> String {
-    option_env!("RAG_WS_BASE_URL")
-        .unwrap_or(DEFAULT_WS_BASE_URL)
-        .trim_end_matches('/')
-        .to_string()
-}
 
 #[cfg(target_os = "windows")]
 type CredentialEntry = keyring_core::Entry;
@@ -114,11 +101,57 @@ fn read_api_key() -> Result<String, CredentialCommandError> {
         .map_err(|error| map_vault_error("vault_read", &error))
 }
 
+fn read_optional_api_key() -> Result<Option<String>, CredentialCommandError> {
+    match credential_entry()?.get_password() {
+        Ok(key) => Ok(Some(key)),
+        Err(keyring::Error::NoEntry) => Ok(None),
+        Err(error) => Err(map_vault_error("vault_read", &error)),
+    }
+}
+
+fn restore_api_key(previous: Option<&str>) -> Result<(), CredentialCommandError> {
+    let entry = credential_entry()?;
+    match previous {
+        Some(key) => entry
+            .set_password(key)
+            .map_err(|error| map_vault_error("vault_rollback", &error)),
+        None => match entry.delete_credential() {
+            Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
+            Err(error) => Err(map_vault_error("vault_rollback", &error)),
+        },
+    }
+}
+
+fn replace_api_key(key: &str) -> Result<(), CredentialCommandError> {
+    let previous = read_optional_api_key()?;
+    let entry = credential_entry()?;
+    entry
+        .set_password(key)
+        .map_err(|error| map_vault_error("vault_write", &error))?;
+
+    match entry.get_password() {
+        Ok(saved_key) if saved_key == key => Ok(()),
+        Ok(_) => {
+            let verification_error = credential_error(
+                "vault_verification",
+                "The saved API credential could not be verified",
+            );
+            restore_api_key(previous.as_deref())?;
+            Err(verification_error)
+        }
+        Err(error) => {
+            let verification_error = map_vault_error("vault_verification", &error);
+            restore_api_key(previous.as_deref())?;
+            Err(verification_error)
+        }
+    }
+}
+
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct CredentialStatus {
+pub struct AccessSettingsStatus {
     configured: bool,
-    api_base_url: String,
+    server_host: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -153,7 +186,7 @@ pub struct AppState {
     watches: Arc<Mutex<HashMap<String, tokio::task::JoinHandle<()>>>>,
 }
 
-fn endpoint_url(path: &str) -> Result<reqwest::Url, String> {
+fn endpoint_url(path: &str, api_base_url: &str) -> Result<reqwest::Url, String> {
     if path.is_empty() || path.starts_with('/') || path.contains("..") || path.contains(':') {
         return Err("Invalid API path".to_string());
     }
@@ -170,16 +203,13 @@ fn endpoint_url(path: &str) -> Result<reqwest::Url, String> {
         return Err("API endpoint is not allowed".to_string());
     }
 
-    reqwest::Url::parse(&format!("{}/{}", api_base_url(), path))
+    reqwest::Url::parse(&format!("{api_base_url}/{path}"))
         .map_err(|_| "Invalid configured API address".to_string())
 }
 
 async fn json_body(response: reqwest::Response) -> Result<ApiResponse, String> {
     let status = response.status().as_u16();
-    let body = response
-        .json::<Value>()
-        .await
-        .unwrap_or_else(|_| Value::Null);
+    let body = response.json::<Value>().await.unwrap_or(Value::Null);
     Ok(ApiResponse { status, body })
 }
 
@@ -193,15 +223,14 @@ async fn authenticated_client() -> Result<(reqwest::Client, String), String> {
 }
 
 #[tauri::command]
-async fn get_credential_status() -> Result<CredentialStatus, CredentialCommandError> {
-    let configured = match credential_entry()?.get_password() {
-        Ok(_) => true,
-        Err(keyring::Error::NoEntry) => false,
-        Err(error) => return Err(map_vault_error("vault_read", &error)),
-    };
-    Ok(CredentialStatus {
+async fn get_access_settings(
+    settings: State<'_, AccessSettingsStore>,
+) -> Result<AccessSettingsStatus, CredentialCommandError> {
+    let configured = read_optional_api_key()?.is_some();
+    let config = settings.current().await;
+    Ok(AccessSettingsStatus {
         configured,
-        api_base_url: api_base_url(),
+        server_host: config.server_host,
     })
 }
 
@@ -236,57 +265,88 @@ async fn validate_api_key(
     ))
 }
 
-#[tauri::command]
-async fn validate_and_save_credential(api_key: String) -> Result<(), CredentialCommandError> {
+fn normalized_api_key(api_key: &str) -> Result<String, CredentialCommandError> {
     let key = api_key.trim().to_string();
     if key.is_empty() || key.len() > 4096 {
         return Err(credential_error("invalid_key", "Enter a valid API key"));
     }
+    Ok(key)
+}
 
-    let url = endpoint_url("workspace/list")
+async fn validate_access(config: &AccessConfig, key: &str) -> Result<(), CredentialCommandError> {
+    let url = endpoint_url("workspace/list", &config.api_base_url)
         .map_err(|_| credential_error("configuration", "Invalid configured API address"))?;
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(10))
         .build()
         .map_err(|_| credential_error("client", "Unable to initialize the API client"))?;
-    let response = validate_api_key(&client, &url, &key).await?;
+    let response = validate_api_key(&client, &url, key).await?;
 
     if !response.status().is_success() {
         return Err(api_validation_error(response.status().as_u16()));
     }
-
-    let entry = credential_entry()?;
-    entry
-        .set_password(&key)
-        .map_err(|error| map_vault_error("vault_write", &error))?;
-    match entry.get_password() {
-        Ok(saved_key) if saved_key == key => Ok(()),
-        Ok(_) => {
-            let _ = entry.delete_credential();
-            Err(credential_error(
-                "vault_verification",
-                "The saved API credential could not be verified",
-            ))
-        }
-        Err(error) => {
-            let _ = entry.delete_credential();
-            Err(map_vault_error("vault_verification", &error))
-        }
-    }
+    Ok(())
 }
 
 #[tauri::command]
-async fn clear_credential() -> Result<(), CredentialCommandError> {
-    match credential_entry()?.delete_credential() {
-        Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
-        Err(error) => Err(map_vault_error("vault_deletion", &error)),
+async fn validate_and_save_access_settings(
+    api_key: String,
+    server_host: String,
+    settings: State<'_, AccessSettingsStore>,
+) -> Result<AccessSettingsStatus, CredentialCommandError> {
+    let key = normalized_api_key(&api_key)?;
+    let config = normalize_server_host(&server_host)
+        .map_err(|message| credential_error("invalid_host", &message))?;
+    validate_access(&config, &key).await?;
+
+    let previous_key = read_optional_api_key()?;
+    replace_api_key(&key)?;
+    if let Err(message) = settings.save_server_host(config.clone()).await {
+        restore_api_key(previous_key.as_deref())?;
+        return Err(credential_error("settings_write", &message));
     }
+
+    Ok(AccessSettingsStatus {
+        configured: true,
+        server_host: config.server_host,
+    })
 }
 
 #[tauri::command]
-async fn api_request(request: JsonApiRequest) -> Result<ApiResponse, String> {
+async fn validate_and_save_api_key(
+    api_key: String,
+    settings: State<'_, AccessSettingsStore>,
+) -> Result<(), CredentialCommandError> {
+    let key = normalized_api_key(&api_key)?;
+    let config = settings.current().await;
+    validate_access(&config, &key).await?;
+    replace_api_key(&key)
+}
+
+#[tauri::command]
+async fn validate_and_save_server_host(
+    server_host: String,
+    settings: State<'_, AccessSettingsStore>,
+) -> Result<String, CredentialCommandError> {
+    let key = read_api_key()?;
+    let config = normalize_server_host(&server_host)
+        .map_err(|message| credential_error("invalid_host", &message))?;
+    validate_access(&config, &key).await?;
+    settings
+        .save_server_host(config.clone())
+        .await
+        .map_err(|message| credential_error("settings_write", &message))?;
+    Ok(config.server_host)
+}
+
+#[tauri::command]
+async fn api_request(
+    request: JsonApiRequest,
+    settings: State<'_, AccessSettingsStore>,
+) -> Result<ApiResponse, String> {
     let (client, key) = authenticated_client().await?;
-    let url = endpoint_url(&request.path)?;
+    let config = settings.current().await;
+    let url = endpoint_url(&request.path, &config.api_base_url)?;
     let response = match request.method.as_str() {
         "GET" if request.body.is_none() => client.get(url).header("X-API-Key", key).send().await,
         "POST" => {
@@ -305,7 +365,10 @@ async fn api_request(request: JsonApiRequest) -> Result<ApiResponse, String> {
 }
 
 #[tauri::command]
-async fn upload_document(request: tauri::ipc::Request<'_>) -> Result<ApiResponse, String> {
+async fn upload_document(
+    request: tauri::ipc::Request<'_>,
+    settings: State<'_, AccessSettingsStore>,
+) -> Result<ApiResponse, String> {
     let tauri::ipc::InvokeBody::Raw(bytes) = request.body() else {
         return Err("Upload payload must be raw bytes".to_string());
     };
@@ -332,6 +395,7 @@ async fn upload_document(request: tauri::ipc::Request<'_>) -> Result<ApiResponse
     }
 
     let (client, key) = authenticated_client().await?;
+    let config = settings.current().await;
     let part = Part::bytes(bytes.clone())
         .file_name(metadata.filename)
         .mime_str(&metadata.mime_type)
@@ -340,7 +404,7 @@ async fn upload_document(request: tauri::ipc::Request<'_>) -> Result<ApiResponse
         .text("workspace_id", metadata.workspace_id)
         .part("file", part);
     let response = client
-        .post(endpoint_url("documents/upload")?)
+        .post(endpoint_url("documents/upload", &config.api_base_url)?)
         .header("X-API-Key", key)
         .multipart(form)
         .send()
@@ -354,10 +418,12 @@ async fn watch_document(
     file_id: String,
     channel: Channel<ProgressEvent>,
     state: State<'_, AppState>,
+    settings: State<'_, AccessSettingsStore>,
 ) -> Result<(), String> {
     uuid::Uuid::parse_str(&file_id).map_err(|_| "Invalid document ID".to_string())?;
     let key = read_api_key().map_err(|error| error.message)?;
-    let mut request = format!("{}/api/v1/documents/{file_id}/ws", ws_base_url())
+    let config = settings.current().await;
+    let mut request = format!("{}/api/v1/documents/{file_id}/ws", config.ws_base_url)
         .into_client_request()
         .map_err(|_| "Invalid configured WebSocket address".to_string())?;
     request.headers_mut().insert(
@@ -414,10 +480,16 @@ pub fn run() {
     tauri::Builder::default()
         .manage(AppState::default())
         .plugin(tauri_plugin_opener::init())
+        .setup(|app| {
+            let settings_path = app.path().app_config_dir()?.join("api-access.json");
+            app.manage(AccessSettingsStore::load(settings_path));
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
-            get_credential_status,
-            validate_and_save_credential,
-            clear_credential,
+            get_access_settings,
+            validate_and_save_access_settings,
+            validate_and_save_api_key,
+            validate_and_save_server_host,
             api_request,
             upload_document,
             watch_document,
@@ -433,17 +505,34 @@ mod tests {
 
     #[test]
     fn endpoint_allowlist_accepts_supported_routes() {
-        assert!(endpoint_url("workspace/list").is_ok());
-        assert!(endpoint_url("workspace/tree").is_ok());
-        assert!(endpoint_url("chat").is_ok());
+        let base_url = "http://localhost:8080/api/v1";
+        assert!(endpoint_url("workspace/list", base_url).is_ok());
+        assert!(endpoint_url("workspace/tree", base_url).is_ok());
+        assert!(endpoint_url("chat", base_url).is_ok());
+    }
+
+    #[test]
+    fn endpoint_builder_uses_the_current_runtime_base_url() {
+        // 1. ARRANGE
+        let base_url = "https://rag.example.com:8443/api/v1";
+
+        // 2. ACT
+        let url = endpoint_url("workspace/list", base_url).expect("endpoint should be valid");
+
+        // 3. ASSERT
+        assert_eq!(
+            url.as_str(),
+            "https://rag.example.com:8443/api/v1/workspace/list"
+        );
     }
 
     #[test]
     fn endpoint_allowlist_rejects_absolute_and_unknown_routes() {
-        assert!(endpoint_url("https://example.com/chat").is_err());
-        assert!(endpoint_url("admin/secrets").is_err());
-        assert!(endpoint_url("workspace/not-a-uuid/disable").is_err());
-        assert!(endpoint_url("workspace/../chat").is_err());
+        let base_url = "http://localhost:8080/api/v1";
+        assert!(endpoint_url("https://example.com/chat", base_url).is_err());
+        assert!(endpoint_url("admin/secrets", base_url).is_err());
+        assert!(endpoint_url("workspace/not-a-uuid/disable", base_url).is_err());
+        assert!(endpoint_url("workspace/../chat", base_url).is_err());
     }
 
     #[test]

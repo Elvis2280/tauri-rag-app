@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { faker } from '@faker-js/faker';
 
 const { invokeMock } = vi.hoisted(() => ({ invokeMock: vi.fn() }));
@@ -12,11 +12,18 @@ vi.mock('@tauri-apps/api/core', () => ({
 
 import apiRag, {
   ApiError,
+  getAccessSettings,
   normalizeNativeError,
-  saveCredential,
+  saveAccessSettings,
+  updateApiKey,
+  updateServerHost,
 } from '@/lib/axios';
 
 describe('native API client', () => {
+  beforeEach(() => {
+    invokeMock.mockReset();
+  });
+
   it('sends typed JSON requests through Tauri without exposing credentials', async () => {
     // 1. ARRANGE
     const responseBody = { id: faker.string.uuid() };
@@ -66,15 +73,49 @@ describe('native API client', () => {
     expect(objectError).toEqual(new Error(nativeMessage));
   });
 
-  it('preserves the native credential error when Tauri rejects with a string', async () => {
+  it('preserves the native access error when Tauri rejects with a string', async () => {
     // 1. ARRANGE
     const nativeMessage = faker.lorem.sentence();
     invokeMock.mockRejectedValueOnce(nativeMessage);
 
     // 2. ACT
-    const request = saveCredential(faker.string.alphanumeric({ length: 32 }));
+    const request = updateApiKey(faker.string.alphanumeric({ length: 32 }));
 
     // 3. ASSERT
     await expect(request).rejects.toThrow(nativeMessage);
+  });
+
+  it('uses write-only native commands for API access settings', async () => {
+    // 1. ARRANGE
+    const apiKey = faker.string.alphanumeric({ length: 32 });
+    const serverHost = faker.internet.url().replace(/\/$/, '');
+    invokeMock
+      .mockResolvedValueOnce({ configured: true, serverHost })
+      .mockResolvedValueOnce({ configured: true, serverHost })
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce(serverHost);
+
+    // 2. ACT
+    const status = await getAccessSettings();
+    await saveAccessSettings(apiKey, serverHost);
+    await updateApiKey(apiKey);
+    await updateServerHost(serverHost);
+
+    // 3. ASSERT
+    expect(status).toEqual({ configured: true, serverHost });
+    expect(invokeMock).toHaveBeenNthCalledWith(1, 'get_access_settings');
+    expect(invokeMock).toHaveBeenNthCalledWith(
+      2,
+      'validate_and_save_access_settings',
+      { apiKey, serverHost },
+    );
+    expect(invokeMock).toHaveBeenNthCalledWith(3, 'validate_and_save_api_key', {
+      apiKey,
+    });
+    expect(invokeMock).toHaveBeenNthCalledWith(
+      4,
+      'validate_and_save_server_host',
+      { serverHost },
+    );
   });
 });

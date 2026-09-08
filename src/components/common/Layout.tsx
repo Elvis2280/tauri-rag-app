@@ -30,13 +30,15 @@ const pathToPage: Record<string, CurrentPageType> = {
 };
 
 type LayoutProps = {
-  onManageCredential?: () => void;
+  interactive?: boolean;
+  onManageApiAccess?: () => void;
 };
 
 export default function Layout({
-  onManageCredential = () => undefined,
+  interactive = true,
+  onManageApiAccess = () => undefined,
 }: LayoutProps) {
-  useHistoryWebsocket();
+  useHistoryWebsocket(interactive);
   const navigate = useNavigate();
   const currentSelectedPage = pathToPage[useLocation().pathname] ?? 'upload';
 
@@ -48,9 +50,10 @@ export default function Layout({
         iconElement={nav.icon}
         label={nav.pageName}
         isSelected={currentSelectedPage === nav.pageName}
+        disabled={!interactive}
       />
     ));
-  }, [currentSelectedPage, navigate]);
+  }, [currentSelectedPage, interactive, navigate]);
 
   return (
     <div className="flex h-screen bg-background w-full">
@@ -62,7 +65,8 @@ export default function Layout({
         {navList}
         <Button
           variant="ghost"
-          onClick={onManageCredential}
+          onClick={onManageApiAccess}
+          disabled={!interactive}
           className="mt-auto flex w-full items-center px-2 py-1 text-center justify-center"
         >
           API access
@@ -72,7 +76,7 @@ export default function Layout({
       {/* Main Content Window */}
       <main className="flex-1 h-full overflow-auto">
         <TooltipProvider>
-          <Outlet />
+          {interactive ? <Outlet /> : null}
         </TooltipProvider>
       </main>
       <Toaster />
@@ -85,13 +89,21 @@ interface NavItemProps {
   label: string;
   isSelected?: boolean;
   onClick: () => void;
+  disabled?: boolean;
 }
 
-const NavItem = ({ iconElement, label, isSelected, onClick }: NavItemProps) => {
+const NavItem = ({
+  iconElement,
+  label,
+  isSelected,
+  onClick,
+  disabled,
+}: NavItemProps) => {
   return (
     <Button
       variant={'ghost'}
       onClick={onClick}
+      disabled={disabled}
       className={cn(
         'flex gap-2 items-center px-2 py-1 rounded cursor-pointer justify-start w-full',
         isSelected && 'bg-sidebar-accent',

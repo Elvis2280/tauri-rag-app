@@ -97,35 +97,54 @@ export const apiRag: ApiClient = {
   },
 };
 
-export type CredentialStatus = { configured: boolean; apiBaseUrl: string };
+export type AccessSettingsStatus = {
+  configured: boolean;
+  serverHost: string;
+};
 
-export async function getCredentialStatus(): Promise<CredentialStatus> {
+export async function getAccessSettings(): Promise<AccessSettingsStatus> {
   try {
-    return await invoke<CredentialStatus>('get_credential_status');
+    return await invoke<AccessSettingsStatus>('get_access_settings');
   } catch (error) {
     throw normalizeNativeError(
       error,
-      'Unable to access the operating system credential vault',
+      'Unable to load the API access settings',
     );
   }
 }
 
-export async function saveCredential(apiKey: string): Promise<void> {
+export async function saveAccessSettings(
+  apiKey: string,
+  serverHost: string,
+): Promise<AccessSettingsStatus> {
   try {
-    await invoke('validate_and_save_credential', { apiKey });
+    return await invoke<AccessSettingsStatus>(
+      'validate_and_save_access_settings',
+      { apiKey, serverHost },
+    );
+  } catch (error) {
+    throw normalizeNativeError(
+      error,
+      'The API access settings could not be validated.',
+    );
+  }
+}
+
+export async function updateApiKey(apiKey: string): Promise<void> {
+  try {
+    await invoke('validate_and_save_api_key', { apiKey });
   } catch (error) {
     throw normalizeNativeError(error, 'The API key could not be validated.');
   }
 }
 
-export async function clearCredential(): Promise<void> {
+export async function updateServerHost(serverHost: string): Promise<string> {
   try {
-    await invoke('clear_credential');
+    return await invoke<string>('validate_and_save_server_host', {
+      serverHost,
+    });
   } catch (error) {
-    throw normalizeNativeError(
-      error,
-      'Unable to remove the API credential',
-    );
+    throw normalizeNativeError(error, 'The server host could not be validated.');
   }
 }
 

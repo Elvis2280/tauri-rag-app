@@ -4,9 +4,10 @@ This template should help get you started developing with Tauri, React and Types
 
 ## Environment
 
-Copy `.env.example` to `.env` and configure the backend addresses. These values
-are compiled into the native transport; the API key is entered by each user at
-runtime and stored in the OS credential vault.
+Copy `.env.example` to `.env` and configure the default backend addresses. These
+values are compiled into the native transport as fallbacks. Users can override
+the server host from the API access settings at runtime, while the API key is
+stored in the OS credential vault.
 
 ```sh
 cp .env.example .env
