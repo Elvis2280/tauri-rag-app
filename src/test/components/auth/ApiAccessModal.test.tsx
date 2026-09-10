@@ -8,7 +8,7 @@ import { API_ACCESS_MASK } from "@/constants/apiAccess";
 function buildProps() {
   return {
     open: true,
-    serverHost: faker.internet.url().replace(/\/$/, ""),
+    serverHost: `${faker.internet.url().replace(/\/$/, "")}/api/v1`,
     onOpenChange: vi.fn(),
     onCancelRequired: vi.fn(),
     onSetup: vi.fn().mockResolvedValue(undefined),
@@ -83,6 +83,28 @@ describe("ApiAccessModal", () => {
 
     // 3. ASSERT
     expect(props.onUpdateServerHost).toHaveBeenCalledWith(serverHost);
+  });
+
+  it("accepts an endpoint path and displays the canonical host after update", async () => {
+    // 1. ARRANGE
+    const user = userEvent.setup();
+    const props = buildProps();
+    const enteredHost = `${faker.internet.url().replace(/\/$/, "")}/api/v2`;
+    const canonicalHost = `${enteredHost.replace(/\/api\/v2$/, "")}/api/v1`;
+    props.onUpdateServerHost.mockImplementation(async () => {
+      props.serverHost = canonicalHost;
+    });
+    const { rerender } = render(<ApiAccessModal {...props} />);
+
+    // 2. ACT
+    await user.click(screen.getByRole("button", { name: "Update Server Host" }));
+    await user.type(screen.getByLabelText("Server Host"), enteredHost);
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    rerender(<ApiAccessModal {...props} />);
+
+    // 3. ASSERT
+    expect(props.onUpdateServerHost).toHaveBeenCalledWith(enteredHost);
+    expect(screen.getByLabelText("Server Host")).toHaveValue(canonicalHost);
   });
 
   it("validates and saves the key and host together during required setup", async () => {

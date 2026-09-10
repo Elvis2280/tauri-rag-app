@@ -13,4 +13,6 @@ export const API_ACCESS_MESSAGES = {
   setupFailed: "The API access settings could not be validated.",
   apiKeyUpdateFailed: "The API key could not be validated.",
   serverHostUpdateFailed: "The server host could not be validated.",
+  serverHostDescription:
+    "The /api/v1 path is added automatically and corrected when needed.",
 } as const;

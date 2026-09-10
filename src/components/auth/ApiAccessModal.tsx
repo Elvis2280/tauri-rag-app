@@ -254,7 +254,7 @@ export default function ApiAccessModal({
                     Server Host
                   </label>
                   <p className="text-xs text-muted-foreground">
-                    A hostname or IP address, with an optional scheme and port.
+                    {API_ACCESS_MESSAGES.serverHostDescription}
                   </p>
                 </div>
                 {!required && editing !== "serverHost" && (

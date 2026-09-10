@@ -88,7 +88,7 @@ describe('native API client', () => {
   it('uses write-only native commands for API access settings', async () => {
     // 1. ARRANGE
     const apiKey = faker.string.alphanumeric({ length: 32 });
-    const serverHost = faker.internet.url().replace(/\/$/, '');
+    const serverHost = `${faker.internet.url().replace(/\/$/, '')}/api/v1`;
     invokeMock
       .mockResolvedValueOnce({ configured: true, serverHost })
       .mockResolvedValueOnce({ configured: true, serverHost })

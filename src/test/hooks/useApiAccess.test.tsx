@@ -30,7 +30,7 @@ describe("useApiAccess", () => {
 
   it("loads the configured status without retrieving the API key", async () => {
     // 1. ARRANGE
-    const serverHost = faker.internet.url().replace(/\/$/, "");
+    const serverHost = `${faker.internet.url().replace(/\/$/, "")}/api/v1`;
     mockedGetAccessSettings.mockResolvedValue({ configured: true, serverHost });
 
     // 2. ACT
@@ -47,10 +47,10 @@ describe("useApiAccess", () => {
     // 1. ARRANGE
     const apiKey = faker.string.alphanumeric({ length: 32 });
     const enteredHost = `${faker.internet.ipv4()}:${faker.internet.port()}`;
-    const canonicalHost = `http://${enteredHost}`;
+    const canonicalHost = `http://${enteredHost}/api/v1`;
     mockedGetAccessSettings.mockResolvedValue({
       configured: false,
-      serverHost: faker.internet.url().replace(/\/$/, ""),
+      serverHost: `${faker.internet.url().replace(/\/$/, "")}/api/v1`,
     });
     mockedSaveAccessSettings.mockResolvedValue({
       configured: true,
@@ -73,9 +73,9 @@ describe("useApiAccess", () => {
   it("updates key and host through separate native operations", async () => {
     // 1. ARRANGE
     const apiKey = faker.string.alphanumeric({ length: 32 });
-    const originalHost = faker.internet.url().replace(/\/$/, "");
+    const originalHost = `${faker.internet.url().replace(/\/$/, "")}/api/v1`;
     const enteredHost = `${faker.internet.ipv4()}:${faker.internet.port()}`;
-    const canonicalHost = `http://${enteredHost}`;
+    const canonicalHost = `http://${enteredHost}/api/v1`;
     mockedGetAccessSettings.mockResolvedValue({
       configured: true,
       serverHost: originalHost,

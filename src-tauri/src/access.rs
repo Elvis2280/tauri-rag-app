@@ -31,9 +31,7 @@ impl AccessConfig {
             .unwrap_or(DEFAULT_WS_BASE_URL)
             .trim_end_matches('/')
             .to_string();
-        let server_host = Url::parse(&api_base_url)
-            .map(|url| url.origin().ascii_serialization())
-            .unwrap_or_else(|_| "http://localhost:8080".to_string());
+        let server_host = api_base_url.clone();
 
         Self {
             server_host,
@@ -138,16 +136,16 @@ pub fn normalize_server_host(value: &str) -> Result<AccessConfig, String> {
         || url.password().is_some()
         || url.query().is_some()
         || url.fragment().is_some()
-        || !matches!(url.path(), "" | "/")
     {
         return Err(
-            "Use an HTTP(S) hostname or IP address without a path, query, or credentials"
+            "Use an HTTP(S) hostname or IP address without query, fragment, or credentials"
                 .to_string(),
         );
     }
 
-    let server_host = url.origin().ascii_serialization();
-    let api_base_url = format!("{server_host}/api/v1");
+    url.set_path("/api/v1");
+    let server_host = url.as_str().to_string();
+    let api_base_url = server_host.clone();
     let websocket_scheme = if url.scheme() == "https" { "wss" } else { "ws" };
     url.set_scheme(websocket_scheme)
         .map_err(|_| "Unable to derive the WebSocket address".to_string())?;
@@ -169,16 +167,21 @@ mod tests {
     fn normalizes_hostname_ip_port_and_tls_addresses() {
         // 1. ARRANGE
         let cases = [
-            ("localhost", "http://localhost", "ws://localhost"),
+            ("localhost", "http://localhost/api/v1", "ws://localhost"),
             (
                 "192.168.1.20:8080/",
-                "http://192.168.1.20:8080",
+                "http://192.168.1.20:8080/api/v1",
                 "ws://192.168.1.20:8080",
             ),
             (
-                "https://rag.example.com:8443",
-                "https://rag.example.com:8443",
+                "https://rag.example.com:8443/api/v2///",
+                "https://rag.example.com:8443/api/v1",
                 "wss://rag.example.com:8443",
+            ),
+            (
+                "https://api-rag-desktop.tail1e26db.ts.net/api/v1",
+                "https://api-rag-desktop.tail1e26db.ts.net/api/v1",
+                "wss://api-rag-desktop.tail1e26db.ts.net",
             ),
         ];
 
@@ -191,7 +194,7 @@ mod tests {
         // 3. ASSERT
         for ((_, expected_host, expected_ws), config) in cases.iter().zip(configs) {
             assert_eq!(&config.server_host, expected_host);
-            assert_eq!(&config.api_base_url, &format!("{expected_host}/api/v1"));
+            assert_eq!(&config.api_base_url, expected_host);
             assert_eq!(&config.ws_base_url, expected_ws);
         }
     }
@@ -202,7 +205,6 @@ mod tests {
         let invalid = [
             "ftp://example.com",
             "https://user:secret@example.com",
-            "https://example.com/api/v1",
             "https://example.com?debug=true",
             "https://example.com#section",
             "not a host",
@@ -224,15 +226,15 @@ mod tests {
             .as_nanos();
         let directory = std::env::temp_dir().join(format!("rag-desktop-{suffix}"));
         let path = directory.join("api-access.json");
-        let config =
-            normalize_server_host("https://rag.example.com:8443").expect("address should be valid");
+        let config = normalize_server_host("https://rag.example.com:8443/api/v9")
+            .expect("address should be valid");
 
         // 2. ACT
         persist_server_host(&path, &config.server_host).expect("settings should save");
         let persisted = load_server_host(&path).expect("settings should reload");
 
         // 3. ASSERT
-        assert_eq!(persisted, config.server_host);
+        assert_eq!(persisted, "https://rag.example.com:8443/api/v1");
         std::fs::remove_dir_all(directory).expect("temporary settings should be removable");
     }
 }

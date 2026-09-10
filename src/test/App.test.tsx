@@ -48,7 +48,7 @@ describe("App workspace bootstrap", () => {
     mockedUseApiAccess.mockReturnValue({
       loading: false,
       configured: true,
-      serverHost: faker.internet.url(),
+      serverHost: `${faker.internet.url().replace(/\/$/, "")}/api/v1`,
       error: null,
       refresh: vi.fn(),
       setup: vi.fn(),
@@ -78,7 +78,7 @@ describe("App workspace bootstrap", () => {
     mockedUseApiAccess.mockReturnValue({
       loading: false,
       configured: false,
-      serverHost: faker.internet.url(),
+      serverHost: `${faker.internet.url().replace(/\/$/, "")}/api/v1`,
       error: null,
       refresh: vi.fn(),
       setup: vi.fn(),
