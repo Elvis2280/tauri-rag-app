@@ -134,7 +134,7 @@ export async function updateApiKey(apiKey: string): Promise<void> {
   try {
     await invoke('validate_and_save_api_key', { apiKey });
   } catch (error) {
-    throw normalizeNativeError(error, 'The API key could not be validated.');
+    throw normalizeNativeError(error, 'The API key could not be saved.');
   }
 }
 
@@ -144,7 +144,18 @@ export async function updateServerHost(serverHost: string): Promise<string> {
       serverHost,
     });
   } catch (error) {
-    throw normalizeNativeError(error, 'The server host could not be validated.');
+    throw normalizeNativeError(error, 'The server host could not be saved.');
+  }
+}
+
+export async function validateSavedAccess(): Promise<void> {
+  try {
+    await invoke('validate_saved_access');
+  } catch (error) {
+    throw normalizeNativeError(
+      error,
+      'The saved API access settings could not be validated.',
+    );
   }
 }
 

@@ -17,6 +17,7 @@ import apiRag, {
   saveAccessSettings,
   updateApiKey,
   updateServerHost,
+  validateSavedAccess,
 } from '@/lib/axios';
 
 describe('native API client', () => {
@@ -93,13 +94,15 @@ describe('native API client', () => {
       .mockResolvedValueOnce({ configured: true, serverHost })
       .mockResolvedValueOnce({ configured: true, serverHost })
       .mockResolvedValueOnce(undefined)
-      .mockResolvedValueOnce(serverHost);
+      .mockResolvedValueOnce(serverHost)
+      .mockResolvedValueOnce(undefined);
 
     // 2. ACT
     const status = await getAccessSettings();
     await saveAccessSettings(apiKey, serverHost);
     await updateApiKey(apiKey);
     await updateServerHost(serverHost);
+    await validateSavedAccess();
 
     // 3. ASSERT
     expect(status).toEqual({ configured: true, serverHost });
@@ -117,5 +120,6 @@ describe('native API client', () => {
       'validate_and_save_server_host',
       { serverHost },
     );
+    expect(invokeMock).toHaveBeenNthCalledWith(5, 'validate_saved_access');
   });
 });

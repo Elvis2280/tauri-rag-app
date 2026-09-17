@@ -1,11 +1,13 @@
-use std::path::{Path, PathBuf};
+use std::{
+    net::IpAddr,
+    path::{Path, PathBuf},
+};
 
 use reqwest::Url;
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
 
 const DEFAULT_API_BASE_URL: &str = "http://localhost:8080/api/v1";
-const DEFAULT_WS_BASE_URL: &str = "ws://localhost:8080";
 const MAX_SERVER_HOST_LENGTH: usize = 2048;
 
 #[derive(Clone, Debug, PartialEq)]
@@ -23,21 +25,8 @@ struct StoredAccessSettings {
 
 impl AccessConfig {
     fn compiled() -> Self {
-        let api_base_url = option_env!("RAG_API_BASE_URL")
-            .unwrap_or(DEFAULT_API_BASE_URL)
-            .trim_end_matches('/')
-            .to_string();
-        let ws_base_url = option_env!("RAG_WS_BASE_URL")
-            .unwrap_or(DEFAULT_WS_BASE_URL)
-            .trim_end_matches('/')
-            .to_string();
-        let server_host = api_base_url.clone();
-
-        Self {
-            server_host,
-            api_base_url,
-            ws_base_url,
-        }
+        normalize_server_host(option_env!("RAG_API_BASE_URL").unwrap_or(DEFAULT_API_BASE_URL))
+            .expect("RAG_API_BASE_URL must be a valid HTTP(S) server address")
     }
 }
 
@@ -122,7 +111,8 @@ pub fn normalize_server_host(value: &str) -> Result<AccessConfig, String> {
         return Err("Enter a valid server hostname or IP address".to_string());
     }
 
-    let address = if trimmed.contains("://") {
+    let has_explicit_scheme = trimmed.contains("://");
+    let address = if has_explicit_scheme {
         trimmed.to_string()
     } else {
         format!("http://{trimmed}")
@@ -143,6 +133,11 @@ pub fn normalize_server_host(value: &str) -> Result<AccessConfig, String> {
         );
     }
 
+    if !has_explicit_scheme && !is_local_host(url.host_str().expect("host was validated")) {
+        url.set_scheme("https")
+            .map_err(|_| "Unable to select a secure server address".to_string())?;
+    }
+
     url.set_path("/api/v1");
     let server_host = url.as_str().to_string();
     let api_base_url = server_host.clone();
@@ -159,9 +154,44 @@ pub fn normalize_server_host(value: &str) -> Result<AccessConfig, String> {
     })
 }
 
+pub fn document_websocket_url(config: &AccessConfig, document_id: &str) -> String {
+    format!("{}/api/v1/documents/{document_id}/ws", config.ws_base_url)
+}
+
+fn is_local_host(host: &str) -> bool {
+    let normalized_host = host.trim_start_matches('[').trim_end_matches(']');
+
+    if normalized_host.eq_ignore_ascii_case("localhost")
+        || normalized_host
+            .to_ascii_lowercase()
+            .strip_suffix(".localhost")
+            .is_some_and(|prefix| !prefix.is_empty())
+    {
+        return true;
+    }
+
+    match normalized_host.parse::<IpAddr>() {
+        Ok(IpAddr::V4(address)) => {
+            address.is_loopback()
+                || address.is_private()
+                || address.is_link_local()
+                || address.is_unspecified()
+        }
+        Ok(IpAddr::V6(address)) => {
+            address.is_loopback()
+                || address.is_unique_local()
+                || address.is_unicast_link_local()
+                || address.is_unspecified()
+        }
+        Err(_) => false,
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{load_server_host, normalize_server_host, persist_server_host};
+    use super::{
+        document_websocket_url, load_server_host, normalize_server_host, persist_server_host,
+    };
 
     #[test]
     fn normalizes_hostname_ip_port_and_tls_addresses() {
@@ -183,6 +213,37 @@ mod tests {
                 "https://api-rag-desktop.tail1e26db.ts.net/api/v1",
                 "wss://api-rag-desktop.tail1e26db.ts.net",
             ),
+            (
+                "rag.example.com:9443/api/v2",
+                "https://rag.example.com:9443/api/v1",
+                "wss://rag.example.com:9443",
+            ),
+            (
+                "http://rag.example.com:8080/custom/path",
+                "http://rag.example.com:8080/api/v1",
+                "ws://rag.example.com:8080",
+            ),
+            (
+                "127.0.0.1:8080",
+                "http://127.0.0.1:8080/api/v1",
+                "ws://127.0.0.1:8080",
+            ),
+            (
+                "169.254.10.20:8080",
+                "http://169.254.10.20:8080/api/v1",
+                "ws://169.254.10.20:8080",
+            ),
+            ("[::1]:8080", "http://[::1]:8080/api/v1", "ws://[::1]:8080"),
+            (
+                "[fd00::1]:8080",
+                "http://[fd00::1]:8080/api/v1",
+                "ws://[fd00::1]:8080",
+            ),
+            (
+                "[fe80::1]:8080",
+                "http://[fe80::1]:8080/api/v1",
+                "ws://[fe80::1]:8080",
+            ),
         ];
 
         // 2. ACT
@@ -197,6 +258,23 @@ mod tests {
             assert_eq!(&config.api_base_url, expected_host);
             assert_eq!(&config.ws_base_url, expected_ws);
         }
+    }
+
+    #[test]
+    fn builds_a_secure_document_websocket_url_from_the_api_server() {
+        // 1. ARRANGE
+        let config = normalize_server_host("https://rag.example.com/api/v1")
+            .expect("address should be valid");
+        let document_id = "2360f311-6c28-447e-9899-eb93a7849854";
+
+        // 2. ACT
+        let url = document_websocket_url(&config, document_id);
+
+        // 3. ASSERT
+        assert_eq!(
+            url,
+            "wss://rag.example.com/api/v1/documents/2360f311-6c28-447e-9899-eb93a7849854/ws"
+        );
     }
 
     #[test]

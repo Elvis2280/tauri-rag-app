@@ -7,6 +7,7 @@ import {
   saveAccessSettings,
   updateApiKey,
   updateServerHost,
+  validateSavedAccess,
 } from "@/lib/axios";
 
 vi.mock("@/lib/axios", () => ({
@@ -16,12 +17,14 @@ vi.mock("@/lib/axios", () => ({
   saveAccessSettings: vi.fn(),
   updateApiKey: vi.fn(),
   updateServerHost: vi.fn(),
+  validateSavedAccess: vi.fn(),
 }));
 
 const mockedGetAccessSettings = vi.mocked(getAccessSettings);
 const mockedSaveAccessSettings = vi.mocked(saveAccessSettings);
 const mockedUpdateApiKey = vi.mocked(updateApiKey);
 const mockedUpdateServerHost = vi.mocked(updateServerHost);
+const mockedValidateSavedAccess = vi.mocked(validateSavedAccess);
 
 describe("useApiAccess", () => {
   beforeEach(() => {
@@ -40,6 +43,7 @@ describe("useApiAccess", () => {
     await waitFor(() => expect(result.current.loading).toBe(false));
     expect(result.current.configured).toBe(true);
     expect(result.current.serverHost).toBe(serverHost);
+    expect(result.current.setupPending).toBe(false);
     expect(Object.keys(result.current)).not.toContain("apiKey");
   });
 
@@ -68,6 +72,7 @@ describe("useApiAccess", () => {
     expect(mockedSaveAccessSettings).toHaveBeenCalledWith(apiKey, enteredHost);
     expect(result.current.configured).toBe(true);
     expect(result.current.serverHost).toBe(canonicalHost);
+    expect(result.current.setupPending).toBe(true);
   });
 
   it("updates key and host through separate native operations", async () => {
@@ -95,5 +100,27 @@ describe("useApiAccess", () => {
     expect(mockedUpdateApiKey).toHaveBeenCalledWith(apiKey);
     expect(mockedUpdateServerHost).toHaveBeenCalledWith(enteredHost);
     expect(result.current.serverHost).toBe(canonicalHost);
+  });
+
+  it("validates the latest saved access and ignores a stale result", async () => {
+    // 1. ARRANGE
+    mockedGetAccessSettings.mockResolvedValue({
+      configured: true,
+      serverHost: `${faker.internet.url().replace(/\/$/, "")}/api/v1`,
+    });
+    mockedValidateSavedAccess.mockResolvedValue(undefined);
+    const { result } = renderHook(() => useApiAccess());
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    // 2. ACT
+    let checkResult: boolean | undefined;
+    await act(async () => {
+      checkResult = await result.current.checkSavedAccess();
+    });
+
+    // 3. ASSERT
+    expect(checkResult).toBe(true);
+    expect(mockedValidateSavedAccess).toHaveBeenCalledTimes(1);
+    expect(result.current.error).toBeNull();
   });
 });

@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 mod access;
 
-use access::{normalize_server_host, AccessConfig, AccessSettingsStore};
+use access::{document_websocket_url, normalize_server_host, AccessConfig, AccessSettingsStore};
 use base64::Engine;
 use futures_util::StreamExt;
 use reqwest::multipart::{Form, Part};
@@ -43,10 +43,7 @@ fn api_validation_error(status: u16) -> CredentialCommandError {
     if matches!(status, 401 | 403) {
         credential_error("rejected", "The API key was rejected")
     } else if status == 404 {
-        credential_error(
-            "configuration",
-            "The API endpoint was not found; check that the address ends in /api/v1",
-        )
+        credential_error("configuration", "The configured API endpoint was not found")
     } else {
         credential_error("backend", &format!("The API returned HTTP {status}"))
     }
@@ -297,7 +294,6 @@ async fn validate_and_save_access_settings(
     let key = normalized_api_key(&api_key)?;
     let config = normalize_server_host(&server_host)
         .map_err(|message| credential_error("invalid_host", &message))?;
-    validate_access(&config, &key).await?;
 
     let previous_key = read_optional_api_key()?;
     replace_api_key(&key)?;
@@ -313,13 +309,8 @@ async fn validate_and_save_access_settings(
 }
 
 #[tauri::command]
-async fn validate_and_save_api_key(
-    api_key: String,
-    settings: State<'_, AccessSettingsStore>,
-) -> Result<(), CredentialCommandError> {
+async fn validate_and_save_api_key(api_key: String) -> Result<(), CredentialCommandError> {
     let key = normalized_api_key(&api_key)?;
-    let config = settings.current().await;
-    validate_access(&config, &key).await?;
     replace_api_key(&key)
 }
 
@@ -328,15 +319,22 @@ async fn validate_and_save_server_host(
     server_host: String,
     settings: State<'_, AccessSettingsStore>,
 ) -> Result<String, CredentialCommandError> {
-    let key = read_api_key()?;
     let config = normalize_server_host(&server_host)
         .map_err(|message| credential_error("invalid_host", &message))?;
-    validate_access(&config, &key).await?;
     settings
         .save_server_host(config.clone())
         .await
         .map_err(|message| credential_error("settings_write", &message))?;
     Ok(config.server_host)
+}
+
+#[tauri::command]
+async fn validate_saved_access(
+    settings: State<'_, AccessSettingsStore>,
+) -> Result<(), CredentialCommandError> {
+    let key = read_api_key()?;
+    let config = settings.current().await;
+    validate_access(&config, &key).await
 }
 
 #[tauri::command]
@@ -423,7 +421,7 @@ async fn watch_document(
     uuid::Uuid::parse_str(&file_id).map_err(|_| "Invalid document ID".to_string())?;
     let key = read_api_key().map_err(|error| error.message)?;
     let config = settings.current().await;
-    let mut request = format!("{}/api/v1/documents/{file_id}/ws", config.ws_base_url)
+    let mut request = document_websocket_url(&config, &file_id)
         .into_client_request()
         .map_err(|_| "Invalid configured WebSocket address".to_string())?;
     request.headers_mut().insert(
@@ -490,6 +488,7 @@ pub fn run() {
             validate_and_save_access_settings,
             validate_and_save_api_key,
             validate_and_save_server_host,
+            validate_saved_access,
             api_request,
             upload_document,
             watch_document,
@@ -541,7 +540,11 @@ mod tests {
         let cases = [
             (401, "rejected", "The API key was rejected"),
             (403, "rejected", "The API key was rejected"),
-            (404, "configuration", "The API endpoint was not found"),
+            (
+                404,
+                "configuration",
+                "The configured API endpoint was not found",
+            ),
             (503, "backend", "The API returned HTTP 503"),
         ];
 

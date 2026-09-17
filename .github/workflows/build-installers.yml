@@ -30,7 +30,6 @@ jobs:
 
     env:
       RAG_API_BASE_URL: ${{ vars.RAG_API_BASE_URL }}
-      RAG_WS_BASE_URL: ${{ vars.RAG_WS_BASE_URL }}
 
     steps:
       - name: Checkout
@@ -77,8 +76,7 @@ jobs:
         run: |
           node <<'NODE'
           const api = process.env.RAG_API_BASE_URL;
-          const ws = process.env.RAG_WS_BASE_URL;
-          if (!api || !ws) throw new Error("RAG_API_BASE_URL and RAG_WS_BASE_URL are required");
+          if (!api) throw new Error("RAG_API_BASE_URL is required");
 
           const apiUrl = new URL(api);
           if (!['http:', 'https:'].includes(apiUrl.protocol) ||
@@ -87,15 +85,11 @@ jobs:
             throw new Error("RAG_API_BASE_URL must be an HTTP(S) URL ending in /api/v1");
           }
 
-          const wsUrl = new URL(ws);
-          if (!['ws:', 'wss:'].includes(wsUrl.protocol) ||
-              wsUrl.pathname !== '/' || wsUrl.username || wsUrl.password ||
-              wsUrl.search || wsUrl.hash) {
-            throw new Error("RAG_WS_BASE_URL must be a WS(S) origin without a path");
-          }
+          const websocketProtocol = apiUrl.protocol === 'https:' ? 'wss:' : 'ws:';
+          const websocketOrigin = `${websocketProtocol}//${apiUrl.host}`;
 
           console.log(`Validated API origin: ${apiUrl.origin}${apiUrl.pathname}`);
-          console.log(`Validated WebSocket origin: ${wsUrl.origin}`);
+          console.log(`Derived WebSocket origin: ${websocketOrigin}`);
           NODE
 
       - name: Test Windows credential store

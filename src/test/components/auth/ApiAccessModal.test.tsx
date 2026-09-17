@@ -14,6 +14,7 @@ function buildProps() {
     onSetup: vi.fn().mockResolvedValue(undefined),
     onUpdateApiKey: vi.fn().mockResolvedValue(undefined),
     onUpdateServerHost: vi.fn().mockResolvedValue(undefined),
+    onValidateAndClose: vi.fn().mockResolvedValue(undefined),
   };
 }
 
@@ -29,6 +30,9 @@ describe("ApiAccessModal", () => {
     expect(screen.getByLabelText("API key")).toHaveValue(API_ACCESS_MASK);
     expect(screen.getByLabelText("API key")).toHaveAttribute("type", "password");
     expect(screen.getByLabelText("Server Host")).toHaveValue(props.serverHost);
+    expect(
+      screen.getByText(/hosts without a scheme use HTTPS\/WSS/i),
+    ).toBeInTheDocument();
   });
 
   it("clears, masks, and saves a replacement API key", async () => {
@@ -64,6 +68,7 @@ describe("ApiAccessModal", () => {
 
     // 3. ASSERT
     expect(props.onUpdateServerHost).not.toHaveBeenCalled();
+    expect(props.onValidateAndClose).not.toHaveBeenCalled();
     expect(screen.getByLabelText("Server Host")).toHaveValue(props.serverHost);
   });
 
@@ -161,5 +166,19 @@ describe("ApiAccessModal", () => {
     expect(props.onOpenChange).toHaveBeenCalledWith(false);
     expect(screen.getByLabelText("API key")).toHaveValue(API_ACCESS_MASK);
     expect(props.onUpdateApiKey).not.toHaveBeenCalled();
+  });
+
+  it("closes immediately and validates saved access when Done is clicked", async () => {
+    // 1. ARRANGE
+    const user = userEvent.setup();
+    const props = buildProps();
+    render(<ApiAccessModal {...props} />);
+
+    // 2. ACT
+    await user.click(screen.getByRole("button", { name: "Done" }));
+
+    // 3. ASSERT
+    expect(props.onOpenChange).toHaveBeenCalledWith(false);
+    expect(props.onValidateAndClose).toHaveBeenCalledTimes(1);
   });
 });

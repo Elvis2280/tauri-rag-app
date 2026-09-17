@@ -47,6 +47,7 @@ type ApiAccessModalProps = {
   onSetup: (apiKey: string, serverHost: string) => Promise<void>;
   onUpdateApiKey: (apiKey: string) => Promise<void>;
   onUpdateServerHost: (serverHost: string) => Promise<void>;
+  onValidateAndClose: () => Promise<void>;
 };
 
 function errorMessage(error: unknown, fallback: string): string {
@@ -63,9 +64,12 @@ export default function ApiAccessModal({
   onSetup,
   onUpdateApiKey,
   onUpdateServerHost,
+  onValidateAndClose,
 }: ApiAccessModalProps) {
   const [editing, setEditing] = useState<AccessField | null>(null);
   const [saving, setSaving] = useState<AccessField | "setup" | null>(null);
+  const [closing, setClosing] = useState(false);
+  const [setupSaved, setSetupSaved] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const {
     formState: { errors },
@@ -90,15 +94,21 @@ export default function ApiAccessModal({
   }, [open, reset, serverHost]);
 
   useEffect(() => {
+    if (open) setSetupSaved(false);
+  }, [open]);
+
+  useEffect(() => {
     if (editing) setFocus(editing);
   }, [editing, setFocus]);
 
-  const closeConfiguredModal = () => {
-    if (saving || required) return;
+  const closeModal = () => {
+    if (saving || closing) return;
     reset({ apiKey: "", serverHost });
     setEditing(null);
     setFormError(null);
+    setClosing(true);
     onOpenChange(false);
+    void onValidateAndClose().finally(() => setClosing(false));
   };
 
   const startEditing = (field: AccessField) => {
@@ -149,6 +159,7 @@ export default function ApiAccessModal({
     try {
       await onSetup(values.apiKey.trim(), values.serverHost.trim());
       reset({ apiKey: "", serverHost: values.serverHost.trim() });
+      setSetupSaved(true);
     } catch (error) {
       setFormError(errorMessage(error, API_ACCESS_MESSAGES.setupFailed));
     } finally {
@@ -160,17 +171,17 @@ export default function ApiAccessModal({
     <Dialog
       open={open}
       onOpenChange={(nextOpen) => {
-        if (!nextOpen) closeConfiguredModal();
+        if (!nextOpen) closeModal();
       }}
     >
       <DialogContent
         className="rounded sm:max-w-xl"
-        showCloseButton={!required && !saving}
+        showCloseButton={!required && !saving && !closing}
         onEscapeKeyDown={(event) => {
-          if (required || saving) event.preventDefault();
+          if (required || saving || closing) event.preventDefault();
         }}
         onInteractOutside={(event) => {
-          if (required || saving) event.preventDefault();
+          if (required || saving || closing) event.preventDefault();
         }}
       >
         <form onSubmit={submitSetup} className="flex flex-col gap-6">
@@ -321,11 +332,21 @@ export default function ApiAccessModal({
 
           {required && (
             <DialogFooter>
-              <Button type="button" variant="ghost" disabled={saving !== null} onClick={onCancelRequired}>
+              <Button type="button" variant="ghost" disabled={saving !== null || closing} onClick={onCancelRequired}>
                 Cancel
               </Button>
-              <Button type="submit" disabled={saving !== null}>
+              <Button type="submit" disabled={saving !== null || closing}>
                 {saving === "setup" ? "Saving…" : "Save"}
+              </Button>
+              <Button type="button" disabled={saving !== null || closing || !setupSaved} onClick={closeModal}>
+                Done
+              </Button>
+            </DialogFooter>
+          )}
+          {!required && (
+            <DialogFooter>
+              <Button type="button" disabled={saving !== null || closing} onClick={closeModal}>
+                Done
               </Button>
             </DialogFooter>
           )}

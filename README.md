@@ -4,8 +4,9 @@ This template should help get you started developing with Tauri, React and Types
 
 ## Environment
 
-Copy `.env.example` to `.env` and configure the default backend addresses. These
-values are compiled into the native transport as fallbacks. Users can override
+Copy `.env.example` to `.env` and configure the default backend address. This
+value is compiled into the native transport as a fallback. The WebSocket origin
+is derived from it (`https` becomes `wss`, and `http` becomes `ws`). Users can override
 the server host from the API access settings at runtime, while the API key is
 stored in the OS credential vault.
 
@@ -29,10 +30,9 @@ The GitHub Actions release workflow builds these files:
 - Windows x86 NSIS installer
 - Universal macOS DMG for Intel and Apple Silicon
 
-Before releasing, configure the repository variables `RAG_API_BASE_URL` and
-`RAG_WS_BASE_URL`. The workflow stops before packaging if either address is
-missing. Do not configure an API key in GitHub Actions; users enter it at
-runtime.
+Before releasing, configure the repository variable `RAG_API_BASE_URL`. The
+workflow stops before packaging if the address is missing or invalid. Do not
+configure an API key in GitHub Actions; users enter it at runtime.
 
 To publish a release, keep the versions in `package.json`, `src-tauri/tauri.conf.json`, and `src-tauri/Cargo.toml` synchronized, then push a matching tag:
 

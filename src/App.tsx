@@ -12,6 +12,8 @@ import UploadSection from "@/components/upload/UploadSection";
 import WorkspacePage from "@/components/workspace/WorkspacePage";
 import { useApiAccess } from "@/hooks/useApiAccess";
 import { useWorkspaceList, workspaceKeys } from "@/hooks/useWorkspace";
+import { normalizeNativeError } from "@/lib/axios";
+import { API_ACCESS_MESSAGES } from "@/constants/apiAccess";
 
 function closeCurrentWindow(): void {
   void getCurrentWindow().close();
@@ -31,7 +33,7 @@ function App() {
     );
   }
 
-  if (!access.configured) {
+  if (!access.configured || access.setupPending) {
     return (
       <HashRouter>
         <Toaster />
@@ -48,6 +50,20 @@ function App() {
           onSetup={access.setup}
           onUpdateApiKey={access.saveApiKey}
           onUpdateServerHost={access.saveServerHost}
+          onValidateAndClose={async () => {
+            access.finishSetup();
+            try {
+              const validated = await access.checkSavedAccess();
+              if (validated) toast.success(API_ACCESS_MESSAGES.accessCheckSuccess);
+            } catch (error) {
+              toast.error(
+                normalizeNativeError(
+                  error,
+                  API_ACCESS_MESSAGES.accessCheckFailed,
+                ).message,
+              );
+            }
+          }}
         />
       </HashRouter>
     );
@@ -92,13 +108,25 @@ function AuthenticatedApp({ access }: AuthenticatedAppProps) {
         onSetup={access.setup}
         onUpdateApiKey={async (apiKey) => {
           await access.saveApiKey(apiKey);
-          await refreshWorkspaceData();
-          toast.success("API key updated");
         }}
         onUpdateServerHost={async (serverHost) => {
           await access.saveServerHost(serverHost);
-          await refreshWorkspaceData();
-          toast.success("Server host updated");
+        }}
+        onValidateAndClose={async () => {
+          setApiAccessOpen(false);
+          try {
+            const validated = await access.checkSavedAccess();
+            if (!validated) return;
+            await refreshWorkspaceData();
+            toast.success(API_ACCESS_MESSAGES.accessCheckSuccess);
+          } catch (error) {
+            toast.error(
+              normalizeNativeError(
+                error,
+                API_ACCESS_MESSAGES.accessCheckFailed,
+              ).message,
+            );
+          }
         }}
       />
     </HashRouter>

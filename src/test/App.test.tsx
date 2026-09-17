@@ -48,12 +48,15 @@ describe("App workspace bootstrap", () => {
     mockedUseApiAccess.mockReturnValue({
       loading: false,
       configured: true,
+      setupPending: false,
       serverHost: `${faker.internet.url().replace(/\/$/, "")}/api/v1`,
       error: null,
       refresh: vi.fn(),
       setup: vi.fn(),
       saveApiKey: vi.fn(),
       saveServerHost: vi.fn(),
+      finishSetup: vi.fn(),
+      checkSavedAccess: vi.fn(),
     });
     mockedUseWorkspaceList.mockReturnValue({
       data: [],
@@ -78,12 +81,15 @@ describe("App workspace bootstrap", () => {
     mockedUseApiAccess.mockReturnValue({
       loading: false,
       configured: false,
+      setupPending: true,
       serverHost: `${faker.internet.url().replace(/\/$/, "")}/api/v1`,
       error: null,
       refresh: vi.fn(),
       setup: vi.fn(),
       saveApiKey: vi.fn(),
       saveServerHost: vi.fn(),
+      finishSetup: vi.fn(),
+      checkSavedAccess: vi.fn(),
     });
 
     // 2. ACT
