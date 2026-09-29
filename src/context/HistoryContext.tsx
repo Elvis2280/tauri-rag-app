@@ -27,6 +27,8 @@ export const useHistory = create<State & Actions>()(
                   ...s.entries,
                   {
                     file_id: id,
+                    originalFilename: null,
+                    workspaceName: null,
                     message: null,
                     status: FILE_STATUS.FILE_UPLOADED,
                     timestamp: new Date().toISOString(),

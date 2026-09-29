@@ -14,6 +14,8 @@ export type statusFileType = (typeof FILE_STATUS)[keyof typeof FILE_STATUS];
 
 export type WebSocketProgressMessage = {
   status: statusFileType;
+  original_filename: string;
+  workspace_name: string;
   step: number | null;
   stage: string;
   message: string;
@@ -29,6 +31,8 @@ export type WebSocketProgressMessage = {
 
 export type HistoryEntry = {
   file_id: string;
+  originalFilename: string | null;
+  workspaceName: string | null;
   message: string | null;
   status: statusFileType;
   timestamp: string;

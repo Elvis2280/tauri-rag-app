@@ -121,6 +121,8 @@ describe("useHistoryWebsocket", () => {
   it("updates the matching store entry via updateEntry when a message arrives", () => {
     // ARRANGE
     const entry = buildHistoryEntry();
+    const originalFilename = faker.system.fileName();
+    const workspaceName = faker.company.name();
     useHistory.setState({ entries: [entry] });
     renderHook(() => useHistoryWebsocket());
     const client = mockClients[0];
@@ -130,6 +132,8 @@ describe("useHistoryWebsocket", () => {
       client.__emitMessage({
         status: FILE_STATUS.OCR_STARTED,
         file_id: entry.file_id,
+        original_filename: originalFilename,
+        workspace_name: workspaceName,
         step: 3,
         stage: "processing",
         message: "extracting text",
@@ -145,6 +149,8 @@ describe("useHistoryWebsocket", () => {
     // ASSERT
     const updated = useHistory.getState().entries[0];
     expect(updated.status).toBe(FILE_STATUS.OCR_STARTED);
+    expect(updated.originalFilename).toBe(originalFilename);
+    expect(updated.workspaceName).toBe(workspaceName);
     expect(updated.step).toBe(3);
     expect(updated.stage).toBe("processing");
     expect(updated.message).toBe("extracting text");
@@ -156,6 +162,8 @@ describe("useHistoryWebsocket", () => {
   it("applies a second WS message after the first update (re-subscribe regression)", () => {
     // ARRANGE
     const entry = buildHistoryEntry();
+    const originalFilename = faker.system.fileName();
+    const workspaceName = faker.company.name();
     useHistory.setState({ entries: [entry] });
     renderHook(() => useHistoryWebsocket());
     const client = mockClients[0];
@@ -165,6 +173,8 @@ describe("useHistoryWebsocket", () => {
       client.__emitMessage({
         status: FILE_STATUS.OCR_STARTED,
         file_id: entry.file_id,
+        original_filename: originalFilename,
+        workspace_name: workspaceName,
         step: 2,
         step_total: 10,
         stage: "processing",
@@ -192,6 +202,8 @@ describe("useHistoryWebsocket", () => {
     // ASSERT
     const updated = useHistory.getState().entries[0];
     expect(updated.status).toBe(FILE_STATUS.OCR_FINISHED);
+    expect(updated.originalFilename).toBe(originalFilename);
+    expect(updated.workspaceName).toBe(workspaceName);
     expect(updated.step).toBe(4);
     expect(updated.stepTotal).toBe(10);
     expect(updated.stage).toBe("finished");

@@ -5,6 +5,53 @@ import { FILE_STATUS } from "@/types/FileTypes";
 import { buildHistoryEntry } from "@/test/factories/history.factory";
 
 describe("FileStatusItem", () => {
+  it("renders the workspace and original filename, file ID hover title, and page status subtitle", () => {
+    // 1. ARRANGE
+    const entry = buildHistoryEntry({
+      status: FILE_STATUS.OCR_STARTED,
+      pageNumber: 2,
+      totalPages: 10,
+    });
+
+    // 2. ACT
+    render(<FileStatusItem {...entry} />);
+
+    // 3. ASSERT
+    const titleGroup = screen.getByTitle(entry.file_id);
+    const workspaceBadge = screen.getByText(`Workspace: ${entry.workspaceName}`);
+    expect(titleGroup).toHaveTextContent(`Workspace: ${entry.workspaceName}`);
+    expect(titleGroup).toHaveTextContent(entry.originalFilename!);
+    expect(workspaceBadge).toHaveAttribute("data-slot", "badge");
+    expect(workspaceBadge).toHaveAttribute("data-variant", "secondary");
+    expect(
+      screen.getByText(
+        `Page: ${entry.pageNumber} / ${entry.totalPages} · Status: ${entry.status}`,
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("renders explicit placeholders when filename or page metadata is unavailable", () => {
+    // 1. ARRANGE
+    const entry = buildHistoryEntry({
+      originalFilename: null,
+      workspaceName: null,
+      pageNumber: null,
+      totalPages: null,
+    });
+
+    // 2. ACT
+    render(<FileStatusItem {...entry} />);
+
+    // 3. ASSERT
+    expect(screen.getByTitle(entry.file_id)).toHaveTextContent(
+      "Workspace: Unknown workspace",
+    );
+    expect(screen.getByTitle(entry.file_id)).toHaveTextContent("Unknown file");
+    expect(
+      screen.getByText(`Page: — / — · Status: ${entry.status}`),
+    ).toBeInTheDocument();
+  });
+
   it("renders a translucent primary progress fill for an active step", () => {
     // 1. ARRANGE
     const entry = buildHistoryEntry({
@@ -87,19 +134,23 @@ describe("FileStatusItem", () => {
     expect(screen.queryByRole("progressbar")).not.toBeInTheDocument();
   });
 
-  it("does not render a null step label when only the total is known", () => {
+  it("renders an independent placeholder when only the total page count is known", () => {
     // 1. ARRANGE
     const entry = buildHistoryEntry({
       step: null,
       stepTotal: 12,
+      totalPages: 12,
     });
 
     // 2. ACT
     render(<FileStatusItem {...entry} />);
 
     // 3. ASSERT
-    expect(screen.getByText(entry.message!)).toBeInTheDocument();
-    expect(screen.queryByText(/null \/ 12/i)).not.toBeInTheDocument();
+    expect(
+      screen.getByText(
+        `Page: — / ${entry.totalPages} · Status: ${entry.status}`,
+      ),
+    ).toBeInTheDocument();
     expect(screen.queryByRole("progressbar")).not.toBeInTheDocument();
   });
 });

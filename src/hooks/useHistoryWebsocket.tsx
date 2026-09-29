@@ -45,6 +45,9 @@ export function useHistoryWebsocket(enabled = true): void {
 
         useHistory.getState().updateEntry(entry.file_id, {
           status: msg.status,
+          originalFilename:
+            msg.original_filename ?? current?.originalFilename ?? null,
+          workspaceName: msg.workspace_name ?? current?.workspaceName ?? null,
           message: msg.message ?? null,
           timestamp: msg.timestamp ?? current?.timestamp ?? new Date().toISOString(),
           step: msg.step ?? current?.step ?? null,

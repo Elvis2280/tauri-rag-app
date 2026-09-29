@@ -5,6 +5,8 @@ export const buildHistoryEntry = (
   overrides?: Partial<HistoryEntry>,
 ): HistoryEntry => ({
   file_id: faker.string.uuid(),
+  originalFilename: faker.system.fileName(),
+  workspaceName: faker.company.name(),
   message: faker.lorem.sentence(),
   status: FILE_STATUS.FILE_UPLOADED,
   timestamp: faker.date.recent().toISOString(),
