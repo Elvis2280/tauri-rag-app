@@ -18,10 +18,9 @@ export default function MessageItem({ id }: { id: string }) {
   return (
     <div
       className={cn(
-        "flex w-full cursor-pointer",
+        "flex w-full",
         isUser ? "justify-end" : "justify-start",
       )}
-      onClick={() => setShowResults((isVisible) => !isVisible)}
     >
       <div
         className={cn(
@@ -39,7 +38,7 @@ export default function MessageItem({ id }: { id: string }) {
               className="inline-flex items-center gap-2 text-xs font-medium underline-offset-4 transition hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               aria-controls={resultsId}
               aria-expanded={showResults}
-
+              onClick={() => setShowResults((isVisible) => !isVisible)}
             >
               {showResults ? (
                 <EyeOff aria-hidden="true" className="size-4" />

@@ -13,16 +13,23 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
 export default function ChatSection() {
   const [workspaceId, setWorkspaceId] = useState<string>("");
   const containerRef = useRef(null as HTMLDivElement | null)
-  const { loading: workspacesLoading, error: workspacesError } =
+  const {
+    loading: workspacesLoading,
+    error: workspacesError,
+    refetch: refetchWorkspaces,
+  } =
     useWorkspaceList({ showErrorToast: false });
   const { sendMessage, isPending } = useMessage();
   const messageOrder = useChatStore((state) => state.messageOrder);
   const workspaceList = useGlobalContext((state) => state.workspaces);
 
   const clearMessages = useChatStore((s) => s.clearMessages)
+  const hasSelectedWorkspace = workspaceList.some(
+    (workspace) => workspace.id === workspaceId,
+  );
 
   const handleSend = (content: string) => {
-    if (!workspaceId) return;
+    if (!hasSelectedWorkspace) return;
     void sendMessage({ workspaceId, message: content }).catch(() => undefined);
   };
 
@@ -39,7 +46,7 @@ export default function ChatSection() {
   }, [])
 
   const isMessageBarDisabled =
-    isPending || workspacesLoading || !!workspacesError || !workspaceId;
+    isPending || workspacesLoading || !!workspacesError || !hasSelectedWorkspace;
 
   const isNoMessages = messageOrder.length === 0
 
@@ -54,46 +61,35 @@ export default function ChatSection() {
           </div>
         )}
       </div>
-      <div className="py-2 px-1 flex justify-between absolute top-0 w-full bg-background items-center">
-        <div className="flex flex-col gap-2 px-6 items-center">
-          <label className="flex items-center gap-3 text-sm" htmlFor="chat-workspace">
-            <span className="text-muted-foreground">Workspace</span>
-            <select
-              id="chat-workspace"
-              aria-label="Workspace"
-              className="min-w-48 h-7 rounded-md border border-input bg-card px-3 py-2 text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              value={workspaceId}
-              onChange={(event) => handleSetWorkspace(event.target.value)}
-              disabled={
-                workspacesLoading || !!workspacesError || workspaceList.length === 0
-              }
+      <div className="absolute right-2 top-2 z-10">
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              type="button"
+              disabled={isNoMessages}
+              variant="ghost"
+              onClick={clearMessages}
+              aria-label="Clear messages"
+              className="h-12 w-12 cursor-pointer rounded-full"
             >
-              <option value="">
-                {workspacesLoading ? "Loading workspaces…" : "Select a workspace"}
-              </option>
-              {workspaceList.map((workspace) => (
-                <option key={workspace.id} value={workspace.id}>
-                  {workspace.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          {workspacesError && (
-            <p className="text-xs text-destructive">{workspacesError}</p>
-          )}
-        </div>
-        <div className="mr-2">
-          <Tooltip>
-            <TooltipTrigger >
-              <Button disabled={isNoMessages} variant={"ghost"} onClick={clearMessages} className=" cursor-pointer w-12 h-12 rounded-full" > <BrushCleaning /> </Button>
-            </TooltipTrigger>
-            <TooltipContent hidden={isNoMessages}>
-                <p>Clear messages</p>
-            </TooltipContent>
-          </Tooltip>
-        </div>
+              <BrushCleaning aria-hidden="true" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent hidden={isNoMessages}>
+            <p>Clear messages</p>
+          </TooltipContent>
+        </Tooltip>
       </div>
-      <MessageBar onSend={handleSend} isDisabled={isMessageBarDisabled} />
+      <MessageBar
+        onSend={handleSend}
+        isDisabled={isMessageBarDisabled}
+        workspaceId={workspaceId}
+        workspaces={workspaceList}
+        onWorkspaceChange={handleSetWorkspace}
+        workspacesLoading={workspacesLoading}
+        workspacesError={workspacesError}
+        onRetryWorkspaces={refetchWorkspaces}
+      />
     </div>
   );
 }

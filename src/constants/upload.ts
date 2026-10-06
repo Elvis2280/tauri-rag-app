@@ -22,3 +22,9 @@ export const ACCEPTED_FILE_TYPES: Accept = {
   "image/jpeg": [".jpg", ".jpeg"],
   "image/webp": [".webp"],
 };
+
+export const DUPLICATE_UPLOAD_TITLE = "File already exists";
+export const DUPLICATE_UPLOAD_DESCRIPTION =
+  "The following file(s) already exist in this workspace. Do you want to upload them anyway?";
+export const DUPLICATE_UPLOAD_ACCEPT_LABEL = "Upload anyway";
+export const DUPLICATE_UPLOAD_CANCEL_LABEL = "Cancel";

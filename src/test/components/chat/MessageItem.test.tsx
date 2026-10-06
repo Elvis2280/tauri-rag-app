@@ -25,6 +25,7 @@ describe("MessageItem", () => {
     // 3. ASSERT
     const bubble = screen.getByText(message.content).parentElement;
     expect(bubble).toHaveClass("bg-primary", "text-background");
+    expect(screen.queryByRole("button")).not.toBeInTheDocument();
   });
 
   it("uses a bordered gray surface with readable text for agent messages", () => {
@@ -41,6 +42,7 @@ describe("MessageItem", () => {
     // 3. ASSERT
     const bubble = screen.getByText(message.content).parentElement;
     expect(bubble).toHaveClass("bg-muted", "text-foreground", "border-border");
+    expect(screen.queryByRole("button")).not.toBeInTheDocument();
   });
 
   it("hides agent results until the full response control is selected", async () => {
@@ -62,13 +64,20 @@ describe("MessageItem", () => {
     render(<MessageItem id={message.id} />);
 
     // 2. ACT
+    expect(screen.getAllByRole("button")).toHaveLength(1);
+    await user.click(screen.getByText(message.content));
+
+    // 3. ASSERT
+    expect(screen.queryByText(result.label)).not.toBeInTheDocument();
+
+    // 4. ACT
     const showButton = screen.getByRole("button", {
       name: "(show full response)",
     });
     expect(screen.queryByText(result.label)).not.toBeInTheDocument();
     await user.click(showButton);
 
-    // 3. ASSERT
+    // 5. ASSERT
     expect(screen.getByText(result.label)).toBeInTheDocument();
     expect(screen.getByText(result.english)).toBeInTheDocument();
     expect(screen.getByText(result.japanese)).toBeInTheDocument();
@@ -76,12 +85,12 @@ describe("MessageItem", () => {
       screen.getByRole("button", { name: "(hide full response)" }),
     ).toBeInTheDocument();
 
-    // 4. ACT
+    // 6. ACT
     await user.click(
       screen.getByRole("button", { name: "(hide full response)" }),
     );
 
-    // 5. ASSERT
+    // 7. ASSERT
     expect(screen.queryByText(result.label)).not.toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "(show full response)" }),

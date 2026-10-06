@@ -5,6 +5,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 type WorkspaceOption = {
@@ -20,6 +21,7 @@ type UploadWorkspaceSelectProps = {
   workspaces: WorkspaceOption[];
   isLoading?: boolean;
   loadError?: string | null;
+  onRetry?: () => void;
 };
 
 export default function UploadWorkspaceSelect({
@@ -30,6 +32,7 @@ export default function UploadWorkspaceSelect({
   workspaces,
   isLoading,
   loadError,
+  onRetry,
 }: UploadWorkspaceSelectProps) {
   const isDisabled = !!loadError || !!isLoading || workspaces.length === 0;
 
@@ -61,6 +64,16 @@ export default function UploadWorkspaceSelect({
         </SelectContent>
       </Select>
       {error && <p className="text-xs text-destructive">{error}</p>}
+      {loadError && (
+        <div className="flex items-center justify-between gap-2 text-xs text-destructive">
+          <p role="alert">{loadError}</p>
+          {onRetry && (
+            <Button type="button" variant="ghost" size="xs" onClick={onRetry}>
+              Retry
+            </Button>
+          )}
+        </div>
+      )}
     </div>
   );
 }

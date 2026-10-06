@@ -1,40 +1,75 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { faker } from "@faker-js/faker";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import UploadSection from "@/components/upload/UploadSection";
 import { ACCEPTED_FILE_TYPES } from "@/constants/upload";
 import { useGlobalContext } from "@/context/GlobalContext";
 import useFileUpload from "@/hooks/useFileUpload";
-import { useWorkspaceList } from "@/hooks/useWorkspace";
+import { useWorkspaceList, useWorkspaceTree } from "@/hooks/useWorkspace";
 import { useFileContext } from "@/context/FileContext";
 import { buildWorkspaceListItem } from "@/test/factories/workspace.factory";
+import { buildWorkspace, buildWorkspaceFolderNode } from "@/test/factories/workspace.factory";
+import type { FileUploadType } from "@/types/FileTypes";
 
 vi.mock("@/hooks/useFileUpload", () => ({ default: vi.fn() }));
-vi.mock("@/hooks/useWorkspace", () => ({ useWorkspaceList: vi.fn() }));
+vi.mock("@/hooks/useWorkspace", () => ({
+  useWorkspaceList: vi.fn(),
+  useWorkspaceTree: vi.fn(),
+}));
 vi.mock("@/components/upload/UploadModal", () => ({
   default: ({
     workspaces,
     onWorkspaceChange,
     onUpload,
+    isOpen,
+    files,
+    canUpload,
+    duplicateFileNames,
+    duplicateWorkspaceName,
+    onUploadAnyway,
+    onCancelDuplicateUpload,
   }: {
+    isOpen: boolean;
     workspaces: Array<{ id: string; name: string }>;
     onWorkspaceChange: (value: string) => void;
     onUpload: () => void;
+    files: FileUploadType[];
+    canUpload: boolean;
+    duplicateFileNames: string[];
+    duplicateWorkspaceName: string;
+    onUploadAnyway: () => void;
+    onCancelDuplicateUpload: () => void;
   }) => (
     <div>
+      <span data-testid="upload-modal-state">{isOpen ? "open" : "closed"}</span>
       {workspaces.map((workspace) => (
         <span key={workspace.id}>{workspace.name}</span>
       ))}
+      <span data-testid="selected-file-count">{files.length}</span>
+      {duplicateFileNames.length > 0 && (
+        <div role="alertdialog">
+          <span>{duplicateWorkspaceName}</span>
+          {duplicateFileNames.map((fileName) => (
+            <span key={fileName}>{fileName}</span>
+          ))}
+          <button onClick={onCancelDuplicateUpload}>Cancel</button>
+          <button onClick={onUploadAnyway}>Upload anyway</button>
+        </div>
+      )}
       <button onClick={() => onWorkspaceChange(workspaces[0]?.id ?? "")}>
         Choose workspace
       </button>
-      <button onClick={onUpload}>Upload selected files</button>
+      <button disabled={!canUpload} onClick={onUpload}>
+        Upload selected files
+      </button>
     </div>
   ),
 }));
 
 const mockedUseFileUpload = vi.mocked(useFileUpload);
 const mockedUseWorkspaceList = vi.mocked(useWorkspaceList);
+const mockedUseWorkspaceTree = vi.mocked(useWorkspaceTree);
 const mockedUploadFiles = vi.fn().mockResolvedValue([]);
 
 describe("UploadSection", () => {
@@ -50,6 +85,12 @@ describe("UploadSection", () => {
     });
     mockedUseWorkspaceList.mockReturnValue({
       data: workspaces,
+      loading: false,
+      error: null,
+      refetch: vi.fn(),
+    });
+    mockedUseWorkspaceTree.mockReturnValue({
+      data: [],
       loading: false,
       error: null,
       refetch: vi.fn(),
@@ -127,5 +168,148 @@ describe("UploadSection", () => {
         workspaceId: workspace.id,
       }),
     );
+  });
+
+  it("continues without a warning when the selected file is new to the workspace", async () => {
+    // 1. ARRANGE
+    const user = userEvent.setup();
+    const fileName = `${faker.string.alpha({ length: 8, casing: "lower" })}.pdf`;
+    const file = new File([faker.lorem.word()], fileName, {
+      type: "application/pdf",
+    });
+    const { container } = render(<UploadSection />);
+    const fileInput = container.querySelector('input[type="file"]');
+
+    // 2. ACT
+    await user.upload(fileInput as HTMLInputElement, file);
+    await user.click(screen.getByRole("button", { name: "Choose workspace" }));
+
+    // 3. ASSERT
+    expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Upload selected files" }),
+    ).toBeEnabled();
+  });
+
+  it("warns once for duplicate files and continues after uploading anyway", async () => {
+    // 1. ARRANGE
+    const user = userEvent.setup();
+    const workspace = useGlobalContext.getState().workspaces[0];
+    const fileName = `${faker.string.alpha({ length: 8, casing: "lower" })}.pdf`;
+    const file = new File([faker.lorem.word()], fileName, {
+      type: "application/pdf",
+    });
+    mockedUseWorkspaceTree.mockReturnValue({
+      data: [
+        buildWorkspace({
+          id: workspace.id,
+          name: workspace.name,
+          children: [
+            buildWorkspaceFolderNode({
+              children: [
+                {
+                  type: "file",
+                  id: faker.string.uuid(),
+                  name: faker.system.fileName(),
+                  originalName: fileName,
+                  documentId: null,
+                  kind: null,
+                  language: null,
+                  pageNumber: null,
+                  mimeType: "application/pdf",
+                  createdAt: null,
+                },
+              ],
+            }),
+          ],
+        }),
+      ],
+      loading: false,
+      error: null,
+      refetch: vi.fn(),
+    });
+    const { container } = render(<UploadSection />);
+    const fileInput = container.querySelector('input[type="file"]');
+
+    // 2. ACT
+    expect(fileInput).not.toBeNull();
+    await user.upload(fileInput as HTMLInputElement, file);
+    await user.click(screen.getByRole("button", { name: "Choose workspace" }));
+
+    // 3. ASSERT
+    expect(screen.getByRole("alertdialog")).toHaveTextContent(fileName);
+    expect(
+      screen.getByRole("button", { name: "Upload anyway" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", {
+        name: "Upload selected files",
+        hidden: true,
+      }),
+    ).toBeDisabled();
+
+    // 4. ACT
+    await user.click(screen.getByRole("button", { name: "Upload anyway" }));
+    await user.click(screen.getByRole("button", { name: "Upload selected files" }));
+
+    // 5. ASSERT
+    await waitFor(() =>
+      expect(mockedUploadFiles).toHaveBeenCalledWith({
+        files: [file],
+        workspaceId: workspace.id,
+      }),
+    );
+  });
+
+  it("clears the selected files and closes the flow when a duplicate is cancelled", async () => {
+    // 1. ARRANGE
+    const user = userEvent.setup();
+    const workspace = useGlobalContext.getState().workspaces[0];
+    const fileName = `${faker.string.alpha({ length: 8, casing: "lower" })}.pdf`;
+    const file = new File([faker.lorem.word()], fileName, {
+      type: "application/pdf",
+    });
+    mockedUseWorkspaceTree.mockReturnValue({
+      data: [
+        buildWorkspace({
+          id: workspace.id,
+          name: workspace.name,
+          children: [
+            buildWorkspaceFolderNode({
+              children: [
+                {
+                  type: "file",
+                  id: faker.string.uuid(),
+                  name: faker.system.fileName(),
+                  originalName: fileName,
+                  documentId: null,
+                  kind: null,
+                  language: null,
+                  pageNumber: null,
+                  mimeType: "application/pdf",
+                  createdAt: null,
+                },
+              ],
+            }),
+          ],
+        }),
+      ],
+      loading: false,
+      error: null,
+      refetch: vi.fn(),
+    });
+    const { container } = render(<UploadSection />);
+    const fileInput = container.querySelector('input[type="file"]');
+
+    // 2. ACT
+    await user.upload(fileInput as HTMLInputElement, file);
+    await user.click(screen.getByRole("button", { name: "Choose workspace" }));
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+
+    // 3. ASSERT
+    expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+    expect(screen.getByTestId("selected-file-count")).toHaveTextContent("0");
+    expect(screen.getByTestId("upload-modal-state")).toHaveTextContent("closed");
+    expect(mockedUploadFiles).not.toHaveBeenCalled();
   });
 });
