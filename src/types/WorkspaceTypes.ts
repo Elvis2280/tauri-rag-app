@@ -107,6 +107,7 @@ export type WorkspaceFileNode = {
   id: string;
   name: string;
   role: WorkspaceFileRole;
+  mimeType?: string;
 };
 
 export type WorkspaceFolderNode = {
@@ -161,6 +162,7 @@ function mapOriginalFile(
     id: file.id,
     name: file.name,
     role: file.file_role,
+    mimeType: file.mime_type,
   };
 }
 
@@ -172,6 +174,7 @@ function mapTranslationFile(
     id: file.id,
     name: file.name,
     role: "translation",
+    mimeType: file.mime_type,
   };
 }
 
@@ -181,6 +184,7 @@ function mapPageFile(file: ApiWorkspacePageFile): WorkspaceFileNode {
     id: file.id,
     name: file.name,
     role: "page",
+    mimeType: file.mime_type,
   };
 }
 

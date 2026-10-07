@@ -153,8 +153,14 @@ describe("mapTreeResponseToUI", () => {
       page_number: 1,
       name: faker.system.commonFileName("md"),
     });
+    const pageOneId = faker.string.uuid();
+    const pageOneDocumentId = faker.string.uuid();
     const pageTwo = buildApiPage({ page_number: 2 });
-    const pageOne = buildApiPage({ page_number: 1 });
+    const pageOne = buildApiPage({
+      id: pageOneId,
+      document_id: pageOneDocumentId,
+      page_number: 1,
+    });
     const apiWorkspace = buildApiWorkspace({
       files: [
         buildApiDocument({
@@ -193,12 +199,14 @@ describe("mapTreeResponseToUI", () => {
         id: originalFile.id,
         name: originalFile.name,
         role: "original",
+        mimeType: originalFile.mime_type,
       },
       {
         type: "file",
         id: convertedPdf.id,
         name: convertedPdf.name,
         role: "converted_pdf",
+        mimeType: convertedPdf.mime_type,
       },
     ]);
     expect(translationFolder.children.map(({ name }) => name)).toEqual([
@@ -217,6 +225,26 @@ describe("mapTreeResponseToUI", () => {
       pageOne.id,
       pageTwo.id,
     ]);
+    expect(pagesFolder.children[0]?.id).toBe(pageOneId);
+    expect(pagesFolder.children[0]?.id).not.toBe(pageOneDocumentId);
+    expect(getFileNodes(documentFolder.children)).toEqual(
+      expect.arrayContaining([
+        {
+          type: "file",
+          id: japanesePageOne.id,
+          name: japanesePageOne.name,
+          role: "translation",
+          mimeType: japanesePageOne.mime_type,
+        },
+        {
+          type: "file",
+          id: pageOne.id,
+          name: pageOne.name,
+          role: "page",
+          mimeType: pageOne.mime_type,
+        },
+      ]),
+    );
     expect(getFileNodes(documentFolder.children).map(({ id }) => id)).toEqual([
       originalFile.id,
       convertedPdf.id,

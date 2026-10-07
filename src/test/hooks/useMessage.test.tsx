@@ -51,15 +51,9 @@ describe("useMessage", () => {
     const workspace = buildWorkspace();
     const userMessage = buildChatMessage();
     const response: SendMessageSuccessResponse = {
-      original_message: userMessage.content,
       response: buildChatMessage({ role: CHAT_ROLE.ASSISTANT }).content,
-      raw_response: [
-        {
-          label: userMessage.content,
-          english: buildChatMessage().content,
-          japanese: buildChatMessage().content,
-        },
-      ],
+      english_markdown_id: buildChatMessage().id,
+      japanese_markdown_id: buildChatMessage().id,
     };
     mockedPost.mockResolvedValue(createResponse(response));
     const { result } = renderHook(() => useMessage(), {
@@ -95,7 +89,8 @@ describe("useMessage", () => {
       role: CHAT_ROLE.ASSISTANT,
       content: response.response,
       status: CHAT_STATUS.COMPLETED,
-      results: response.raw_response,
+      englishMarkdownId: response.english_markdown_id,
+      japaneseMarkdownId: response.japanese_markdown_id,
     });
   });
 
@@ -224,9 +219,9 @@ describe("useMessage", () => {
     const workspace = buildWorkspace();
     const userMessage = buildChatMessage();
     const response: SendMessageSuccessResponse = {
-      original_message: userMessage.content,
       response: buildChatMessage({ role: CHAT_ROLE.ASSISTANT }).content,
-      raw_response: [],
+      english_markdown_id: buildChatMessage().id,
+      japanese_markdown_id: buildChatMessage().id,
     };
     let resolveRequest!: (value: AxiosResponse<typeof response>) => void;
     mockedPost.mockImplementation(

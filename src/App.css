@@ -177,6 +177,79 @@
 }
 
 @layer utilities {
+  .markdown-viewer-content {
+    overflow-wrap: anywhere;
+    line-height: 1.75;
+  }
+
+  .markdown-viewer-content :where(h1, h2, h3, h4, h5, h6) {
+    margin-block: 1.5em 0.6em;
+    font-family: var(--font-heading);
+    font-weight: 700;
+    line-height: 1.25;
+  }
+
+  .markdown-viewer-content h1 { font-size: 2rem; }
+  .markdown-viewer-content h2 { font-size: 1.6rem; }
+  .markdown-viewer-content h3 { font-size: 1.3rem; }
+  .markdown-viewer-content h4,
+  .markdown-viewer-content h5,
+  .markdown-viewer-content h6 { font-size: 1.1rem; }
+
+  .markdown-viewer-content :where(p, ul, ol, blockquote, pre, table) {
+    margin-block: 1em;
+  }
+
+  .markdown-viewer-content :where(ul, ol) {
+    padding-inline-start: 1.5rem;
+  }
+
+  .markdown-viewer-content ul { list-style: disc; }
+  .markdown-viewer-content ol { list-style: decimal; }
+
+  .markdown-viewer-content a {
+    color: var(--primary);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+
+  .markdown-viewer-content blockquote {
+    border-inline-start: 3px solid var(--border);
+    padding-inline-start: 1rem;
+    color: var(--muted-foreground);
+  }
+
+  .markdown-viewer-content pre {
+    overflow-x: auto;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--muted);
+    padding: 1rem;
+  }
+
+  .markdown-viewer-content :not(pre) > code {
+    border-radius: 0.25rem;
+    background: var(--muted);
+    padding: 0.15em 0.35em;
+  }
+
+  .markdown-viewer-content table {
+    display: block;
+    width: 100%;
+    overflow-x: auto;
+    border-collapse: collapse;
+  }
+
+  .markdown-viewer-content :where(th, td) {
+    border: 1px solid var(--border);
+    padding: 0.5rem 0.75rem;
+    text-align: start;
+  }
+
+  .markdown-viewer-content th { background: var(--muted); }
+  .markdown-viewer-content img { max-width: 100%; height: auto; }
+  .markdown-viewer-content hr { border-color: var(--border); }
+
   @keyframes neon-sun-glow {
     0%,
     100% {

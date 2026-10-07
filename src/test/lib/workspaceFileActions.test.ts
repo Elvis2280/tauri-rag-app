@@ -76,6 +76,24 @@ describe("dispatchWorkspaceFileOpen", () => {
     expect(handlers.markdown).not.toHaveBeenCalled();
   });
 
+  it("routes image MIME types even when the filename extension is unfamiliar", () => {
+    // 1. ARRANGE
+    const file = buildWorkspaceFile("data", "page");
+    file.mimeType = "image/webp";
+    const handlers = {
+      pdf: vi.fn(),
+      markdown: vi.fn(),
+      image: vi.fn(),
+    };
+
+    // 2. ACT
+    const action = dispatchWorkspaceFileOpen(file, handlers);
+
+    // 3. ASSERT
+    expect(action).toBe("image");
+    expect(handlers.image).toHaveBeenCalledWith(file);
+  });
+
   it("leaves unsupported file types without an open handler", () => {
     // 1. ARRANGE
     const file = buildWorkspaceFile("docx");

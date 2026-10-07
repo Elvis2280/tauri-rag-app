@@ -1,5 +1,3 @@
-import type { MessageResult } from "@/types/MessageTypes";
-
 export const CHAT_ROLE = {
   USER: "user",
   ASSISTANT: "assistant",
@@ -20,5 +18,6 @@ export type ChatMessage = {
   content: string;
   createdAt: string;
   status: ChatStatus;
-  results?: MessageResult[];
+  englishMarkdownId?: string;
+  japaneseMarkdownId?: string;
 };

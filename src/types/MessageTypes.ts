@@ -3,16 +3,10 @@ export type SendMessageParams = {
   message: string;
 };
 
-export type MessageResult = {
-  label: string;
-  english: string;
-  japanese: string;
-};
-
 export type SendMessageSuccessResponse = {
-  original_message: string;
   response: string;
-  raw_response: MessageResult[];
+  english_markdown_id: string;
+  japanese_markdown_id: string;
 };
 
 export type MessageErrorItem = {

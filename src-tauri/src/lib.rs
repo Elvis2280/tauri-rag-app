@@ -197,7 +197,9 @@ fn endpoint_url(path: &str, api_base_url: &str) -> Result<reqwest::Url, String> 
         }
         value if value.starts_with("documents/") => {
             let parts: Vec<&str> = value.split('/').collect();
-            parts.len() == 3 && parts[2] == "pdf" && uuid::Uuid::parse_str(parts[1]).is_ok()
+            parts.len() == 3
+                && matches!(parts[2], "pdf" | "markdown" | "images")
+                && uuid::Uuid::parse_str(parts[1]).is_ok()
         }
         _ => false,
     };
@@ -226,6 +228,44 @@ fn validate_pdf_response(content_type: Option<&str>, bytes: &[u8]) -> Result<(),
 
     if !bytes.starts_with(b"%PDF-") {
         return Err("The downloaded file is not a valid PDF".to_string());
+    }
+
+    Ok(())
+}
+
+fn validate_markdown_response(content_type: Option<&str>, bytes: &[u8]) -> Result<(), String> {
+    if let Some(content_type) = content_type {
+        let media_type = content_type.split(';').next().unwrap_or_default().trim();
+        if ![
+            "text/markdown",
+            "text/x-markdown",
+            "text/plain",
+            "application/octet-stream",
+        ]
+        .iter()
+        .any(|allowed| media_type.eq_ignore_ascii_case(allowed))
+        {
+            return Err("The server returned a non-Markdown response".to_string());
+        }
+    }
+
+    std::str::from_utf8(bytes)
+        .map(|_| ())
+        .map_err(|_| "The Markdown response is not valid UTF-8".to_string())
+}
+
+fn validate_image_response(content_type: Option<&str>, bytes: &[u8]) -> Result<(), String> {
+    if bytes.is_empty() {
+        return Err("The image response was empty".to_string());
+    }
+
+    if let Some(content_type) = content_type {
+        let media_type = content_type.split(';').next().unwrap_or_default().trim();
+        if !media_type.to_ascii_lowercase().starts_with("image/")
+            && !media_type.eq_ignore_ascii_case("application/octet-stream")
+        {
+            return Err("The server returned a non-image response".to_string());
+        }
     }
 
     Ok(())
@@ -429,13 +469,18 @@ async fn api_binary_request(
     let bytes = response
         .bytes()
         .await
-        .map_err(|_| "Unable to download the PDF".to_string())?;
+        .map_err(|_| "Unable to download the file".to_string())?;
 
     if !status.is_success() {
         return Err(binary_error_message(status.as_u16(), &bytes));
     }
 
-    validate_pdf_response(content_type.as_deref(), &bytes)?;
+    match request.path.rsplit('/').next() {
+        Some("pdf") => validate_pdf_response(content_type.as_deref(), &bytes)?,
+        Some("markdown") => validate_markdown_response(content_type.as_deref(), &bytes)?,
+        Some("images") => validate_image_response(content_type.as_deref(), &bytes)?,
+        _ => return Err("Binary API endpoint is not allowed".to_string()),
+    }
     Ok(tauri::ipc::Response::new(bytes.to_vec()))
 }
 
@@ -580,7 +625,10 @@ pub fn run() {
 
 #[cfg(test)]
 mod tests {
-    use super::{api_validation_error, binary_error_message, endpoint_url, validate_pdf_response};
+    use super::{
+        api_validation_error, binary_error_message, endpoint_url, validate_image_response,
+        validate_markdown_response, validate_pdf_response,
+    };
 
     #[test]
     fn endpoint_allowlist_accepts_supported_routes() {
@@ -590,6 +638,16 @@ mod tests {
         assert!(endpoint_url("chat", base_url).is_ok());
         assert!(endpoint_url(
             "documents/3d712170-c022-41fe-b9e4-87ccfb35559a/pdf",
+            base_url,
+        )
+        .is_ok());
+        assert!(endpoint_url(
+            "documents/3d712170-c022-41fe-b9e4-87ccfb35559a/markdown",
+            base_url,
+        )
+        .is_ok());
+        assert!(endpoint_url(
+            "documents/3d712170-c022-41fe-b9e4-87ccfb35559a/images",
             base_url,
         )
         .is_ok());
@@ -617,6 +675,13 @@ mod tests {
         assert!(endpoint_url("admin/secrets", base_url).is_err());
         assert!(endpoint_url("workspace/not-a-uuid/disable", base_url).is_err());
         assert!(endpoint_url("documents/not-a-uuid/pdf", base_url).is_err());
+        assert!(endpoint_url("documents/not-a-uuid/markdown", base_url).is_err());
+        assert!(endpoint_url("documents/not-a-uuid/images", base_url).is_err());
+        assert!(endpoint_url(
+            "documents/3d712170-c022-41fe-b9e4-87ccfb35559a/image",
+            base_url,
+        )
+        .is_err());
         assert!(endpoint_url(
             "documents/3d712170-c022-41fe-b9e4-87ccfb35559a/source",
             base_url,
@@ -654,6 +719,31 @@ mod tests {
 
         // 3. ASSERT
         assert!(results.iter().all(Result::is_err));
+    }
+
+    #[test]
+    fn markdown_response_validation_accepts_utf8_text() {
+        let bytes = "# 日本語\nmarkdown".as_bytes();
+
+        assert!(validate_markdown_response(Some("text/plain; charset=utf-8"), bytes).is_ok());
+    }
+
+    #[test]
+    fn markdown_response_validation_rejects_non_text_and_invalid_utf8() {
+        assert!(validate_markdown_response(Some("text/html"), b"<h1>error</h1>").is_err());
+        assert!(validate_markdown_response(Some("text/markdown"), &[0xff, 0xfe]).is_err());
+    }
+
+    #[test]
+    fn image_response_validation_accepts_images_and_binary_content_types() {
+        assert!(validate_image_response(Some("image/png"), b"png-bytes").is_ok());
+        assert!(validate_image_response(Some("application/octet-stream"), b"image-bytes").is_ok());
+    }
+
+    #[test]
+    fn image_response_validation_rejects_empty_and_non_image_responses() {
+        assert!(validate_image_response(Some("image/png"), b"").is_err());
+        assert!(validate_image_response(Some("text/html"), b"error page").is_err());
     }
 
     #[test]

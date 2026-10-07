@@ -65,7 +65,7 @@ async function requestBinary(path: string): Promise<{ data: Uint8Array }> {
     });
     return { data };
   } catch (error) {
-    throw normalizeNativeError(error, 'Unable to download the PDF');
+    throw normalizeNativeError(error, 'Unable to download the file');
   }
 }
 

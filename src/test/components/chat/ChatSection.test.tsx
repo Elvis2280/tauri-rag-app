@@ -34,9 +34,9 @@ describe("ChatSection", () => {
     window.localStorage.clear();
     mockedSendMessage.mockReset();
     mockedSendMessage.mockResolvedValue({
-      original_message: "",
       response: "",
-      raw_response: [],
+      english_markdown_id: buildChatMessage().id,
+      japanese_markdown_id: buildChatMessage().id,
     });
     mockedRefetchWorkspaces.mockReset();
     mockedUseMessage.mockReturnValue({

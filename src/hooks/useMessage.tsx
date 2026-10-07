@@ -53,7 +53,8 @@ export default function useMessage(): UseMessageResult {
         {
           role: CHAT_ROLE.ASSISTANT,
           content: response.response,
-          results: response.raw_response,
+          englishMarkdownId: response.english_markdown_id,
+          japaneseMarkdownId: response.japanese_markdown_id,
         },
         crypto.randomUUID(),
         CHAT_STATUS.COMPLETED,

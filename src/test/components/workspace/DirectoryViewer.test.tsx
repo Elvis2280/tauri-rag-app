@@ -20,6 +20,9 @@ const mockDisableWorkspace = vi.fn();
 const mockCreateWorkspace = vi.fn();
 const mockLoadPdf = vi.fn();
 const mockSavePdf = vi.fn();
+const mockLoadMarkdown = vi.fn();
+const mockLoadImage = vi.fn();
+const mockSaveImage = vi.fn();
 const mockTreeNodeIds: string[] = [];
 
 vi.mock("@/hooks/useWorkspace", () => ({
@@ -39,6 +42,24 @@ vi.mock("@/hooks/useDocument", () => ({
   useDocumentPdf: () => ({
     loadPdf: mockLoadPdf,
     savePdf: mockSavePdf,
+    isPending: false,
+    isSaving: false,
+    error: null,
+  }),
+}));
+
+vi.mock("@/hooks/useDocumentMarkdown", () => ({
+  useDocumentMarkdown: () => ({
+    loadMarkdown: mockLoadMarkdown,
+    isPending: false,
+    error: null,
+  }),
+}));
+
+vi.mock("@/hooks/useDocumentImage", () => ({
+  useDocumentImage: () => ({
+    loadImage: mockLoadImage,
+    saveImage: mockSaveImage,
     isPending: false,
     isSaving: false,
     error: null,
@@ -71,6 +92,84 @@ vi.mock("@/components/workspace/PdfViewerDialog", () => ({
             Download
           </button>
         ) : null}
+      </div>
+    ) : null,
+}));
+
+vi.mock("@/components/workspace/MarkdownViewerDialog", () => ({
+  default: ({
+    open,
+    requestedName,
+    markdown,
+    isLoading,
+    hasLoadError,
+    onOpenChange,
+  }: {
+    open: boolean;
+    requestedName: string | null;
+    markdown: { name: string; content: string } | null;
+    isLoading: boolean;
+    hasLoadError: boolean;
+    onOpenChange: (open: boolean) => void;
+  }) =>
+    open ? (
+      <div role="dialog">
+        {isLoading ? "Loading Markdown" : null}
+        {hasLoadError ? "Markdown failed" : null}
+        {markdown?.name ?? requestedName}
+        {markdown?.content ?? null}
+        <button
+          type="button"
+          aria-label="Close Markdown preview"
+          onClick={() => onOpenChange(false)}
+        >
+          Close
+        </button>
+      </div>
+    ) : null,
+}));
+
+vi.mock("@/components/workspace/ImageViewerDialog", () => ({
+  default: ({
+    open,
+    requestedName,
+    image,
+    isLoading,
+    hasLoadError,
+    onDownload,
+    isDownloading,
+    onOpenChange,
+  }: {
+    open: boolean;
+    requestedName: string | null;
+    image: { name: string; mimeType: string; data: Uint8Array } | null;
+    isLoading: boolean;
+    hasLoadError: boolean;
+    onDownload: () => void;
+    isDownloading: boolean;
+    onOpenChange: (open: boolean) => void;
+  }) =>
+    open ? (
+      <div role="dialog">
+        {isLoading ? "Loading image" : null}
+        {hasLoadError ? "Image failed" : null}
+        {image?.name ?? requestedName}
+        {image?.mimeType ?? null}
+        {image ? <span>Loaded {image.data[0]}</span> : null}
+        <button
+          type="button"
+          disabled={!image || isDownloading}
+          onClick={onDownload}
+        >
+          Download image
+        </button>
+        <button
+          type="button"
+          aria-label="Close image preview"
+          onClick={() => onOpenChange(false)}
+        >
+          Close
+        </button>
       </div>
     ) : null,
 }));
@@ -170,8 +269,13 @@ describe("DirectoryViewer", () => {
     mockCreateWorkspace.mockReset();
     mockLoadPdf.mockReset();
     mockSavePdf.mockReset();
+    mockLoadMarkdown.mockReset();
+    mockLoadImage.mockReset();
+    mockSaveImage.mockReset();
     mockTreeNodeIds.length = 0;
     mockLoadPdf.mockResolvedValue(new Uint8Array([37, 80, 68, 70, 45]));
+    mockLoadMarkdown.mockResolvedValue(faker.lorem.paragraph());
+    mockLoadImage.mockResolvedValue(new Uint8Array([137, 80, 78, 71]));
   });
 
   afterEach(() => {
@@ -309,6 +413,244 @@ describe("DirectoryViewer", () => {
     // 3. ASSERT
     expect(mockLoadPdf).toHaveBeenCalledWith(file.id);
     await waitFor(() => expect(screen.getByRole("dialog")).toHaveTextContent(file.name));
+  });
+
+  it("opens page PNGs and other image MIME types by click or keyboard", async () => {
+    // 1. ARRANGE
+    const user = userEvent.setup();
+    const pagePng = buildWorkspaceFileNode({
+      name: `${faker.word.noun()}.png`,
+      role: "page",
+      mimeType: "image/png",
+    });
+    const mimeTypedImage = buildWorkspaceFileNode({
+      name: `${faker.word.noun()}.data`,
+      role: "page",
+      mimeType: "image/webp",
+    });
+    const missingIdImage = buildWorkspaceFileNode({
+      id: "",
+      name: `${faker.word.noun()}.png`,
+      role: "page",
+      mimeType: "image/png",
+    });
+    const folder = buildWorkspaceFolderNode({
+      name: "Pages",
+      children: [pagePng, mimeTypedImage, missingIdImage],
+    });
+    render(<DirectoryViewer workspaces={[buildWorkspace({ children: [folder] })]} />);
+
+    // 2. ACT
+    await user.click(screen.getByRole("button", { name: `Open ${pagePng.name}` }));
+    await waitFor(() =>
+      expect(screen.getByRole("dialog")).toHaveTextContent(pagePng.name),
+    );
+    await user.click(screen.getByRole("button", { name: "Close image preview" }));
+    const imageButton = screen.getByRole("button", {
+      name: `Open ${mimeTypedImage.name}`,
+    });
+    imageButton.focus();
+    await user.keyboard("{Enter}");
+    await user.click(screen.getByText(missingIdImage.name));
+
+    // 3. ASSERT
+    expect(mockLoadImage).toHaveBeenNthCalledWith(1, pagePng.id);
+    expect(mockLoadImage).toHaveBeenNthCalledWith(2, mimeTypedImage.id);
+    expect(mockLoadImage).toHaveBeenCalledTimes(2);
+    expect(screen.getByRole("dialog")).toHaveTextContent("image/webp");
+    expect(
+      screen.queryByRole("button", { name: `Open ${missingIdImage.name}` }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("downloads the image bytes under the original filename", async () => {
+    // 1. ARRANGE
+    const user = userEvent.setup();
+    const data = new Uint8Array([137, 80, 78, 71]);
+    const file = buildWorkspaceFileNode({
+      name: `${faker.word.noun()}.png`,
+      role: "page",
+      mimeType: "image/png",
+    });
+    mockLoadImage.mockResolvedValue(data);
+    const folder = buildWorkspaceFolderNode({ children: [file] });
+
+    // 2. ACT
+    render(<DirectoryViewer workspaces={[buildWorkspace({ children: [folder] })]} />);
+    await user.click(screen.getByRole("button", { name: `Open ${file.name}` }));
+    await user.click(await screen.findByRole("button", { name: "Download image" }));
+
+    // 3. ASSERT
+    expect(mockLoadImage).toHaveBeenCalledWith(file.id);
+    expect(mockSaveImage).toHaveBeenCalledWith({
+      name: file.name,
+      mimeType: "image/png",
+      data,
+    });
+  });
+
+  it("allows only the newest image request to replace the viewer", async () => {
+    // 1. ARRANGE
+    const user = userEvent.setup();
+    const firstImage = buildWorkspaceFileNode({
+      name: `${faker.word.noun()}.png`,
+      role: "page",
+      mimeType: "image/png",
+    });
+    const secondImage = buildWorkspaceFileNode({
+      name: `${faker.word.noun()}.webp`,
+      role: "page",
+      mimeType: "image/webp",
+    });
+    const firstBytes = new Uint8Array([1]);
+    const secondBytes = new Uint8Array([2]);
+    const requests = new Map<string, (bytes: Uint8Array) => void>();
+    mockLoadImage.mockImplementation(
+      (fileId: string) =>
+        new Promise<Uint8Array>((resolve) => requests.set(fileId, resolve)),
+    );
+    const folder = buildWorkspaceFolderNode({ children: [firstImage, secondImage] });
+
+    // 2. ACT
+    render(<DirectoryViewer workspaces={[buildWorkspace({ children: [folder] })]} />);
+    await user.click(screen.getByRole("button", { name: `Open ${firstImage.name}` }));
+    await user.click(screen.getByRole("button", { name: `Open ${secondImage.name}` }));
+    await act(async () => requests.get(secondImage.id)?.(secondBytes));
+    await act(async () => requests.get(firstImage.id)?.(firstBytes));
+
+    // 3. ASSERT
+    await waitFor(() =>
+      expect(screen.getByRole("dialog")).toHaveTextContent(secondImage.name),
+    );
+    expect(screen.getByRole("dialog")).toHaveTextContent("Loaded 2");
+    expect(screen.getByRole("dialog")).not.toHaveTextContent("Loaded 1");
+  });
+
+  it("opens Markdown files by click and keyboard and ignores files without IDs", async () => {
+    // 1. ARRANGE
+    const user = userEvent.setup();
+    const mdFile = buildWorkspaceFileNode({
+      name: `${faker.word.noun()}.md`,
+    });
+    const markdownFile = buildWorkspaceFileNode({
+      name: `${faker.word.noun()}.MaRkDoWn`,
+    });
+    const missingIdFile = buildWorkspaceFileNode({
+      id: "",
+      name: `${faker.word.noun()}.md`,
+    });
+    const folder = buildWorkspaceFolderNode({
+      children: [mdFile, markdownFile, missingIdFile],
+    });
+    render(<DirectoryViewer workspaces={[buildWorkspace({ children: [folder] })]} />);
+
+    // 2. ACT
+    await user.click(screen.getByRole("button", { name: `Open ${mdFile.name}` }));
+    await waitFor(() =>
+      expect(screen.getByRole("dialog")).toHaveTextContent(mdFile.name),
+    );
+    await user.click(
+      screen.getByRole("button", { name: "Close Markdown preview" }),
+    );
+    const markdownButton = screen.getByRole("button", {
+      name: `Open ${markdownFile.name}`,
+    });
+    markdownButton.focus();
+    await user.keyboard("{Enter}");
+    await user.click(screen.getByText(missingIdFile.name));
+
+    // 3. ASSERT
+    expect(mockLoadMarkdown).toHaveBeenNthCalledWith(1, mdFile.id);
+    expect(mockLoadMarkdown).toHaveBeenNthCalledWith(2, markdownFile.id);
+    expect(mockLoadMarkdown).toHaveBeenCalledTimes(2);
+    expect(
+      screen.queryByRole("button", { name: `Open ${missingIdFile.name}` }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("shows a Markdown load failure in the viewer", async () => {
+    // 1. ARRANGE
+    const user = userEvent.setup();
+    const file = buildWorkspaceFileNode({
+      name: `${faker.word.noun()}.md`,
+    });
+    const folder = buildWorkspaceFolderNode({ children: [file] });
+    mockLoadMarkdown.mockRejectedValue(new Error(faker.lorem.sentence()));
+
+    // 2. ACT
+    render(<DirectoryViewer workspaces={[buildWorkspace({ children: [folder] })]} />);
+    await user.click(screen.getByRole("button", { name: `Open ${file.name}` }));
+
+    // 3. ASSERT
+    await waitFor(() =>
+      expect(screen.getByRole("dialog")).toHaveTextContent("Markdown failed"),
+    );
+  });
+
+  it("allows only the newest Markdown request to replace the viewer", async () => {
+    // 1. ARRANGE
+    const user = userEvent.setup();
+    const firstFile = buildWorkspaceFileNode({
+      name: `${faker.word.noun()}.md`,
+    });
+    const secondFile = buildWorkspaceFileNode({
+      name: `${faker.word.noun()}.markdown`,
+    });
+    const firstContent = faker.lorem.paragraph();
+    const secondContent = faker.lorem.paragraph();
+    const folder = buildWorkspaceFolderNode({ children: [firstFile, secondFile] });
+    const requests = new Map<string, (content: string) => void>();
+    mockLoadMarkdown.mockImplementation(
+      (fileId: string) =>
+        new Promise<string>((resolve) => requests.set(fileId, resolve)),
+    );
+    render(<DirectoryViewer workspaces={[buildWorkspace({ children: [folder] })]} />);
+
+    // 2. ACT
+    await user.click(screen.getByRole("button", { name: `Open ${firstFile.name}` }));
+    await user.click(screen.getByRole("button", { name: `Open ${secondFile.name}` }));
+    await act(async () => {
+      requests.get(secondFile.id)?.(secondContent);
+    });
+    await act(async () => {
+      requests.get(firstFile.id)?.(firstContent);
+    });
+
+    // 3. ASSERT
+    await waitFor(() =>
+      expect(screen.getByRole("dialog")).toHaveTextContent(secondFile.name),
+    );
+    expect(screen.getByRole("dialog")).not.toHaveTextContent(firstFile.name);
+    expect(screen.getByRole("dialog")).toHaveTextContent(secondContent);
+    expect(screen.getByRole("dialog")).not.toHaveTextContent(firstContent);
+  });
+
+  it("ignores a Markdown response after the viewer is closed", async () => {
+    // 1. ARRANGE
+    const user = userEvent.setup();
+    const file = buildWorkspaceFileNode({
+      name: `${faker.word.noun()}.md`,
+    });
+    const folder = buildWorkspaceFolderNode({ children: [file] });
+    let resolveRequest: ((content: string) => void) | undefined;
+    mockLoadMarkdown.mockReturnValue(
+      new Promise<string>((resolve) => {
+        resolveRequest = resolve;
+      }),
+    );
+    render(<DirectoryViewer workspaces={[buildWorkspace({ children: [folder] })]} />);
+
+    // 2. ACT
+    await user.click(screen.getByRole("button", { name: `Open ${file.name}` }));
+    await user.click(
+      screen.getByRole("button", { name: "Close Markdown preview" }),
+    );
+    await act(async () => {
+      resolveRequest?.(faker.lorem.paragraph());
+    });
+
+    // 3. ASSERT
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
   it("saves the last successfully loaded PDF without requesting it again", async () => {
@@ -536,9 +878,14 @@ describe("DirectoryViewer", () => {
     await user.click(screen.getByText("Translation"));
     await user.click(screen.getByText("English"));
     await user.click(screen.getByText(markdown.name));
+    await user.click(
+      screen.getByRole("button", { name: "Close Markdown preview" }),
+    );
     await user.click(screen.getByText("Pages"));
     await user.click(screen.getByText(pageImage.name));
     expect(mockLoadPdf).not.toHaveBeenCalled();
+    expect(mockLoadImage).toHaveBeenCalledWith(pageImage.id);
+    await user.click(screen.getByRole("button", { name: "Close image preview" }));
     await user.click(
       screen.getByRole("button", { name: `Open ${originalPdf.name}` }),
     );
