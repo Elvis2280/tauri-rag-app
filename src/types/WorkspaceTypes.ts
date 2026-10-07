@@ -1,37 +1,57 @@
-export type ApiFileNode = {
-  type: "file";
+import {
+  TRANSLATION_LANGUAGE_NAMES,
+  WORKSPACE_TREE_LABELS,
+} from "@/constants/workspace";
+
+export type ApiWorkspaceOriginalFile = {
   id: string;
   name: string;
-  original_name: string | null;
-  document_id: string | null;
-  kind: string | null;
-  language: string | null;
-  page_number: number | null;
-  mime_type: string | null;
-  created_at: string | null;
+  file_role: "original" | "converted_pdf";
+  path: string;
+  status: string;
+  mime_type: string;
+  created_at: string;
 };
 
-export type ApiFolderNode = {
-  type: "folder";
+export type ApiWorkspaceTranslationFile = {
   id: string;
   name: string;
-  path: string | null;
-  original_name: string | null;
-  status: string | null;
-  language: string | null;
-  mime_type: string | null;
-  page_count: number | null;
-  created_at: string | null;
-  children: ApiTreeNode[];
+  language: string;
+  page_number: number;
+  path: string;
+  status: string;
+  mime_type: string;
+  created_at: string;
 };
 
-export type ApiTreeNode = ApiFileNode | ApiFolderNode;
+export type ApiWorkspacePageFile = {
+  id: string;
+  name: string;
+  document_id: string;
+  page_number: number;
+  path: string;
+  status: string;
+  mime_type: string;
+};
+
+export type ApiWorkspaceDocument = {
+  id: string;
+  name: string;
+  status: string;
+  language: string | null;
+  mime_type: string;
+  page_count: number;
+  created_at: string;
+  original_files: ApiWorkspaceOriginalFile[];
+  translations: Record<string, ApiWorkspaceTranslationFile[]>;
+  pages: ApiWorkspacePageFile[];
+};
 
 export type ApiWorkspaceTreeNode = {
   id: string;
   name: string;
   status: string;
-  children: ApiFolderNode[];
+  files: ApiWorkspaceDocument[];
 };
 
 export type ApiWorkspaceTreeResponse = {
@@ -77,30 +97,22 @@ export type DisableWorkspaceValidationDetail = WorkspaceValidationDetail;
 
 export type DisableWorkspaceErrorResponse = WorkspaceValidationErrorResponse;
 
+export type WorkspaceFileRole =
+  | ApiWorkspaceOriginalFile["file_role"]
+  | "translation"
+  | "page";
+
 export type WorkspaceFileNode = {
   type: "file";
   id: string;
   name: string;
-  originalName: string | null;
-  documentId: string | null;
-  kind: string | null;
-  language: string | null;
-  pageNumber: number | null;
-  mimeType: string | null;
-  createdAt: string | null;
+  role: WorkspaceFileRole;
 };
 
 export type WorkspaceFolderNode = {
   type: "folder";
   id: string;
   name: string;
-  path: string | null;
-  originalName: string | null;
-  status: string | null;
-  language: string | null;
-  mimeType: string | null;
-  pageCount: number | null;
-  createdAt: string | null;
   children: WorkspaceNode[];
 };
 
@@ -110,7 +122,6 @@ export type Workspace = {
   type: "workspace";
   id: string;
   name: string;
-  status: string;
   children: WorkspaceFolderNode[];
 };
 
@@ -120,56 +131,154 @@ export type WorkspaceTreeResponse = {
   workspaces: Workspace[];
 };
 
-function mapFileNode(apiFile: ApiFileNode): WorkspaceFileNode {
+export function removeFileExtension(name: string): string {
+  const trimmedName = name.trim();
+  const extensionSeparator = trimmedName.lastIndexOf(".");
+
+  if (
+    extensionSeparator <= 0 ||
+    extensionSeparator === trimmedName.length - 1
+  ) {
+    return name;
+  }
+
+  return trimmedName.slice(0, extensionSeparator);
+}
+
+function createFolder(
+  id: string,
+  name: string,
+  children: WorkspaceNode[],
+): WorkspaceFolderNode {
+  return { type: "folder", id, name, children };
+}
+
+function mapOriginalFile(
+  file: ApiWorkspaceOriginalFile,
+): WorkspaceFileNode {
   return {
     type: "file",
-    id: apiFile.id,
-    name: apiFile.name,
-    originalName: apiFile.original_name,
-    documentId: apiFile.document_id,
-    kind: apiFile.kind,
-    language: apiFile.language,
-    pageNumber: apiFile.page_number,
-    mimeType: apiFile.mime_type,
-    createdAt: apiFile.created_at,
+    id: file.id,
+    name: file.name,
+    role: file.file_role,
   };
 }
 
-function mapFolderNode(
-  folder: ApiFolderNode,
-): WorkspaceFolderNode {
-  const children: WorkspaceNode[] = [];
-  for (const child of folder.children) {
-    if (child.type === "file") {
-      children.push(mapFileNode(child));
-    } else if (child.type === "folder") {
-      children.push(mapFolderNode(child));
-    } else {
-      console.warn("WorkspaceTypes.mapFolderNode: skipping unknown child type", child);
-    }
-  }
+function mapTranslationFile(
+  file: ApiWorkspaceTranslationFile,
+): WorkspaceFileNode {
   return {
-    type: "folder",
-    id: folder.id,
-    name: folder.name,
-    path: folder.path,
-    originalName: folder.original_name,
-    status: folder.status,
-    language: folder.language,
-    mimeType: folder.mime_type,
-    pageCount: folder.page_count,
-    createdAt: folder.created_at,
-    children,
+    type: "file",
+    id: file.id,
+    name: file.name,
+    role: "translation",
   };
 }
 
-function mapWorkspace(apiWs: ApiWorkspaceTreeNode): Workspace {
+function mapPageFile(file: ApiWorkspacePageFile): WorkspaceFileNode {
+  return {
+    type: "file",
+    id: file.id,
+    name: file.name,
+    role: "page",
+  };
+}
+
+function getLanguageFolderName(language: string): string {
+  const normalizedLanguage = language.trim().replace(/[_-]+/g, " ");
+  const knownLanguageName = Object.entries(TRANSLATION_LANGUAGE_NAMES).find(
+    ([languageKey]) => languageKey === normalizedLanguage.toLocaleLowerCase(),
+  )?.[1];
+  if (knownLanguageName) {
+    return knownLanguageName;
+  }
+
+  return normalizedLanguage.replace(/\b\p{L}/gu, (character) =>
+    character.toLocaleUpperCase(),
+  );
+}
+
+function getLanguageSortOrder(language: string): number {
+  const normalizedLanguage = language.toLocaleLowerCase();
+  if (normalizedLanguage === "japanese") {
+    return 0;
+  }
+  if (normalizedLanguage === "english") {
+    return 1;
+  }
+  return 2;
+}
+
+function compareByPageNumber(
+  left: { page_number: number; name: string; id: string },
+  right: { page_number: number; name: string; id: string },
+): number {
+  return (
+    left.page_number - right.page_number ||
+    left.name.localeCompare(right.name) ||
+    left.id.localeCompare(right.id)
+  );
+}
+
+function compareOriginalFileRole(
+  left: ApiWorkspaceOriginalFile,
+  right: ApiWorkspaceOriginalFile,
+): number {
+  if (left.file_role === right.file_role) {
+    return left.name.localeCompare(right.name);
+  }
+  return left.file_role === "original" ? -1 : 1;
+}
+
+function mapDocument(
+  workspaceId: string,
+  document: ApiWorkspaceDocument,
+): WorkspaceFolderNode {
+  const folderId = `document:${workspaceId}:${document.id}`;
+  const originalFiles = [...document.original_files]
+    .sort(compareOriginalFileRole)
+    .map(mapOriginalFile);
+  const languageFolders = Object.entries(document.translations)
+    .sort(([leftLanguage], [rightLanguage]) => {
+      const languageOrder =
+        getLanguageSortOrder(leftLanguage) -
+        getLanguageSortOrder(rightLanguage);
+      return languageOrder || leftLanguage.localeCompare(rightLanguage);
+    })
+    .map(([language, files]) =>
+      createFolder(
+        `${folderId}:translation:${encodeURIComponent(language)}`,
+        getLanguageFolderName(language),
+        [...files].sort(compareByPageNumber).map(mapTranslationFile),
+      ),
+    );
+  const pages = [...document.pages]
+    .sort(compareByPageNumber)
+    .map(mapPageFile);
+
+  return createFolder(folderId, removeFileExtension(document.name), [
+    createFolder(
+      `${folderId}:original-files`,
+      WORKSPACE_TREE_LABELS.originalFile,
+      originalFiles,
+    ),
+    createFolder(
+      `${folderId}:translations`,
+      WORKSPACE_TREE_LABELS.translation,
+      languageFolders,
+    ),
+    createFolder(`${folderId}:pages`, WORKSPACE_TREE_LABELS.pages, pages),
+  ]);
+}
+
+function mapWorkspace(apiWorkspace: ApiWorkspaceTreeNode): Workspace {
   return {
     type: "workspace",
-    id: apiWs.id,
-    name: apiWs.name,
-    status: apiWs.status,
-    children: apiWs.children.map(mapFolderNode),
+    id: apiWorkspace.id,
+    name: apiWorkspace.name,
+    children: apiWorkspace.files.map((file) =>
+      mapDocument(apiWorkspace.id, file),
+    ),
   };
 }
 

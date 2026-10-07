@@ -7,6 +7,7 @@ export const WORKSPACE_ENDPOINTS = {
 
 export const DOCUMENT_ENDPOINTS = {
   upload: "/documents/upload",
+  pdf: (documentId: string) => `/documents/${documentId}/pdf`,
 } as const;
 
 export const CHAT_ENDPOINTS = {

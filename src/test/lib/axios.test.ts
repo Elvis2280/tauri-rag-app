@@ -58,6 +58,37 @@ describe('native API client', () => {
     });
   });
 
+  it('downloads binary API responses through the native binary command', async () => {
+    // 1. ARRANGE
+    const bytes = new Uint8Array([37, 80, 68, 70, 45]);
+    invokeMock.mockResolvedValueOnce(bytes);
+
+    // 2. ACT
+    const response = await apiRag.getBinary('/documents/document-id/pdf');
+
+    // 3. ASSERT
+    expect(response.data).toBe(bytes);
+    expect(invokeMock).toHaveBeenCalledWith('api_binary_request', {
+      request: {
+        method: 'GET',
+        path: 'documents/document-id/pdf',
+        body: undefined,
+      },
+    });
+  });
+
+  it('normalizes binary command failures for the document hook', async () => {
+    // 1. ARRANGE
+    const nativeMessage = faker.lorem.sentence();
+    invokeMock.mockRejectedValueOnce(nativeMessage);
+
+    // 2. ACT
+    const request = apiRag.getBinary('/documents/document-id/pdf');
+
+    // 3. ASSERT
+    await expect(request).rejects.toThrow(nativeMessage);
+  });
+
   it('normalizes Tauri string and object rejections without exposing extra data', () => {
     // 1. ARRANGE
     const nativeMessage = faker.lorem.sentence();

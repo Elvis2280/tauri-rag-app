@@ -6,6 +6,7 @@ mod access;
 use access::{document_websocket_url, normalize_server_host, AccessConfig, AccessSettingsStore};
 use base64::Engine;
 use futures_util::StreamExt;
+use reqwest::header::CONTENT_TYPE;
 use reqwest::multipart::{Form, Part};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -194,6 +195,10 @@ fn endpoint_url(path: &str, api_base_url: &str) -> Result<reqwest::Url, String> 
             let parts: Vec<&str> = value.split('/').collect();
             parts.len() == 3 && parts[2] == "disable" && uuid::Uuid::parse_str(parts[1]).is_ok()
         }
+        value if value.starts_with("documents/") => {
+            let parts: Vec<&str> = value.split('/').collect();
+            parts.len() == 3 && parts[2] == "pdf" && uuid::Uuid::parse_str(parts[1]).is_ok()
+        }
         _ => false,
     };
     if !allowed {
@@ -202,6 +207,41 @@ fn endpoint_url(path: &str, api_base_url: &str) -> Result<reqwest::Url, String> 
 
     reqwest::Url::parse(&format!("{api_base_url}/{path}"))
         .map_err(|_| "Invalid configured API address".to_string())
+}
+
+fn validate_pdf_response(content_type: Option<&str>, bytes: &[u8]) -> Result<(), String> {
+    if bytes.is_empty() {
+        return Err("The PDF response was empty".to_string());
+    }
+
+    if let Some(content_type) = content_type {
+        if !content_type
+            .split(';')
+            .next()
+            .is_some_and(|value| value.trim().eq_ignore_ascii_case("application/pdf"))
+        {
+            return Err("The server returned a non-PDF response".to_string());
+        }
+    }
+
+    if !bytes.starts_with(b"%PDF-") {
+        return Err("The downloaded file is not a valid PDF".to_string());
+    }
+
+    Ok(())
+}
+
+fn binary_error_message(status: u16, bytes: &[u8]) -> String {
+    let detail = serde_json::from_slice::<Value>(bytes)
+        .ok()
+        .and_then(|body| {
+            body.get("detail")
+                .and_then(Value::as_str)
+                .or_else(|| body.get("message").and_then(Value::as_str))
+                .map(str::to_string)
+        });
+
+    detail.unwrap_or_else(|| format!("The API returned HTTP {status}"))
 }
 
 async fn json_body(response: reqwest::Response) -> Result<ApiResponse, String> {
@@ -363,6 +403,43 @@ async fn api_request(
 }
 
 #[tauri::command]
+async fn api_binary_request(
+    request: JsonApiRequest,
+    settings: State<'_, AccessSettingsStore>,
+) -> Result<tauri::ipc::Response, String> {
+    if request.method != "GET" || request.body.is_some() {
+        return Err("Unsupported binary API request".to_string());
+    }
+
+    let (client, key) = authenticated_client().await?;
+    let config = settings.current().await;
+    let url = endpoint_url(&request.path, &config.api_base_url)?;
+    let response = client
+        .get(url)
+        .header("X-API-Key", key)
+        .send()
+        .await
+        .map_err(|_| "Unable to reach the RAG API".to_string())?;
+    let status = response.status();
+    let content_type = response
+        .headers()
+        .get(CONTENT_TYPE)
+        .and_then(|value| value.to_str().ok())
+        .map(str::to_string);
+    let bytes = response
+        .bytes()
+        .await
+        .map_err(|_| "Unable to download the PDF".to_string())?;
+
+    if !status.is_success() {
+        return Err(binary_error_message(status.as_u16(), &bytes));
+    }
+
+    validate_pdf_response(content_type.as_deref(), &bytes)?;
+    Ok(tauri::ipc::Response::new(bytes.to_vec()))
+}
+
+#[tauri::command]
 async fn upload_document(
     request: tauri::ipc::Request<'_>,
     settings: State<'_, AccessSettingsStore>,
@@ -477,6 +554,8 @@ async fn stop_document_watch(file_id: String, state: State<'_, AppState>) -> Res
 pub fn run() {
     tauri::Builder::default()
         .manage(AppState::default())
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
             let settings_path = app.path().app_config_dir()?.join("api-access.json");
@@ -490,6 +569,7 @@ pub fn run() {
             validate_and_save_server_host,
             validate_saved_access,
             api_request,
+            api_binary_request,
             upload_document,
             watch_document,
             stop_document_watch
@@ -500,7 +580,7 @@ pub fn run() {
 
 #[cfg(test)]
 mod tests {
-    use super::{api_validation_error, endpoint_url};
+    use super::{api_validation_error, binary_error_message, endpoint_url, validate_pdf_response};
 
     #[test]
     fn endpoint_allowlist_accepts_supported_routes() {
@@ -508,6 +588,11 @@ mod tests {
         assert!(endpoint_url("workspace/list", base_url).is_ok());
         assert!(endpoint_url("workspace/tree", base_url).is_ok());
         assert!(endpoint_url("chat", base_url).is_ok());
+        assert!(endpoint_url(
+            "documents/3d712170-c022-41fe-b9e4-87ccfb35559a/pdf",
+            base_url,
+        )
+        .is_ok());
     }
 
     #[test]
@@ -531,7 +616,59 @@ mod tests {
         assert!(endpoint_url("https://example.com/chat", base_url).is_err());
         assert!(endpoint_url("admin/secrets", base_url).is_err());
         assert!(endpoint_url("workspace/not-a-uuid/disable", base_url).is_err());
+        assert!(endpoint_url("documents/not-a-uuid/pdf", base_url).is_err());
+        assert!(endpoint_url(
+            "documents/3d712170-c022-41fe-b9e4-87ccfb35559a/source",
+            base_url,
+        )
+        .is_err());
         assert!(endpoint_url("workspace/../chat", base_url).is_err());
+    }
+
+    #[test]
+    fn pdf_response_validation_accepts_pdf_bytes() {
+        // 1. ARRANGE
+        let bytes = b"%PDF-1.7\nexample";
+
+        // 2. ACT
+        let result = validate_pdf_response(Some("application/pdf; charset=binary"), bytes);
+
+        // 3. ASSERT
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn pdf_response_validation_rejects_invalid_responses() {
+        // 1. ARRANGE
+        let cases = [
+            (Some("application/pdf"), &b""[..]),
+            (Some("text/html"), &b"%PDF-1.7"[..]),
+            (Some("application/pdf"), &b"not a pdf"[..]),
+        ];
+
+        // 2. ACT
+        let results = cases
+            .iter()
+            .map(|(content_type, bytes)| validate_pdf_response(*content_type, bytes))
+            .collect::<Vec<_>>();
+
+        // 3. ASSERT
+        assert!(results.iter().all(Result::is_err));
+    }
+
+    #[test]
+    fn binary_errors_use_safe_backend_details_or_status() {
+        // 1. ARRANGE
+        let backend_error = br#"{"detail":"Document is unavailable"}"#;
+        let invalid_error = b"upstream failure";
+
+        // 2. ACT
+        let detail_message = binary_error_message(404, backend_error);
+        let fallback_message = binary_error_message(503, invalid_error);
+
+        // 3. ASSERT
+        assert_eq!(detail_message, "Document is unavailable");
+        assert_eq!(fallback_message, "The API returned HTTP 503");
     }
 
     #[test]

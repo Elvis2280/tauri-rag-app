@@ -24,28 +24,21 @@ function buildWorkspaceFile(
     type: "file",
     id: faker.string.uuid(),
     name: faker.system.fileName(),
-    originalName: null,
-    documentId: null,
-    kind: null,
-    language: null,
-    pageNumber: null,
-    mimeType: null,
-    createdAt: null,
+    role: "original",
     ...overrides,
   };
 }
 
 describe("findDuplicateUploadFiles", () => {
-  it("matches nested workspace files using originalName before name", () => {
+  it("matches nested uploaded originals by their filename", () => {
     // 1. ARRANGE
-    const originalName = faker.system.fileName();
-    const storedName = faker.system.fileName();
-    const selectedFile = buildUploadFile(originalName);
+    const fileName = faker.system.fileName();
+    const selectedFile = buildUploadFile(fileName);
     const workspace = buildWorkspace({
       children: [
         buildWorkspaceFolderNode({
           children: [
-            buildWorkspaceFile({ name: storedName, originalName }),
+            buildWorkspaceFile({ name: fileName, role: "original" }),
           ],
         }),
       ],
@@ -56,19 +49,20 @@ describe("findDuplicateUploadFiles", () => {
 
     // 3. ASSERT
     expect(duplicates).toEqual([selectedFile]);
-    expect(
-      findDuplicateUploadFiles([buildUploadFile(storedName)], workspace),
-    ).toEqual([]);
   });
 
-  it("falls back to the displayed node name when originalName is absent", () => {
+  it("ignores converted PDFs, translations, and page images", () => {
     // 1. ARRANGE
     const existingName = faker.string.alpha({ length: 12, casing: "lower" });
     const selectedFile = buildUploadFile(existingName);
     const workspace = buildWorkspace({
       children: [
         buildWorkspaceFolderNode({
-          children: [buildWorkspaceFile({ name: existingName })],
+          children: [
+            buildWorkspaceFile({ name: `${existingName}.pdf`, role: "converted_pdf" }),
+            buildWorkspaceFile({ name: `${existingName}.md`, role: "translation" }),
+            buildWorkspaceFile({ name: `${existingName}.png`, role: "page" }),
+          ],
         }),
       ],
     });
@@ -77,7 +71,7 @@ describe("findDuplicateUploadFiles", () => {
     const duplicates = findDuplicateUploadFiles([selectedFile], workspace);
 
     // 3. ASSERT
-    expect(duplicates).toEqual([selectedFile]);
+    expect(duplicates).toEqual([]);
   });
 
   it("matches the base filename when the extensions differ", () => {

@@ -1,15 +1,16 @@
 import { faker } from "@faker-js/faker";
 import type {
   Workspace,
+  WorkspaceFileNode,
   WorkspaceFolderNode,
   WorkspaceListItem,
 } from "@/types/WorkspaceTypes";
+import { removeFileExtension } from "@/types/WorkspaceTypes";
 
 export const buildWorkspace = (overrides?: Partial<Workspace>): Workspace => ({
   type: "workspace",
   id: faker.string.uuid(),
   name: faker.company.name(),
-  status: faker.helpers.arrayElement(["ready", "processing", "error"]),
   children: [],
   ...overrides,
 });
@@ -20,16 +21,32 @@ export const buildWorkspaceFolderNode = (
   type: "folder",
   id: faker.string.uuid(),
   name: faker.system.directoryPath(),
-  path: null,
-  originalName: null,
-  status: null,
-  language: null,
-  mimeType: null,
-  pageCount: null,
-  createdAt: null,
   children: [],
   ...overrides,
 });
+
+export const buildWorkspaceFileNode = (
+  overrides?: Partial<WorkspaceFileNode>,
+): WorkspaceFileNode => ({
+  type: "file",
+  id: faker.string.uuid(),
+  name: faker.system.commonFileName("pdf"),
+  role: "original",
+  ...overrides,
+});
+
+export const buildWorkspaceDocumentFolder = (
+  fileOverrides?: Partial<WorkspaceFileNode>,
+  folderOverrides?: Partial<WorkspaceFolderNode>,
+): WorkspaceFolderNode => {
+  const file = buildWorkspaceFileNode(fileOverrides);
+
+  return buildWorkspaceFolderNode({
+    name: removeFileExtension(file.name),
+    children: [file],
+    ...folderOverrides,
+  });
+};
 
 export const buildWorkspaceListItem = (
   overrides?: Partial<WorkspaceListItem>,

@@ -13,7 +13,7 @@ function removeFileExtension(fileName: string): string {
 
 function getWorkspaceFileNames(node: WorkspaceNode): string[] {
   if (node.type === "file") {
-    return [node.originalName ?? node.name];
+    return node.role === "original" ? [node.name] : [];
   }
 
   return node.children.flatMap(getWorkspaceFileNames);

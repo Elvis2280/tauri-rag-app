@@ -18,6 +18,7 @@ export class ApiError extends Error {
 
 type ApiClient = {
   get<T>(path: string): Promise<{ data: T }>;
+  getBinary(path: string): Promise<{ data: Uint8Array }>;
   post<T>(path: string, body?: unknown): Promise<{ data: T }>;
 };
 
@@ -56,6 +57,18 @@ async function request<T>(
   return { data: response.body };
 }
 
+async function requestBinary(path: string): Promise<{ data: Uint8Array }> {
+  const normalizedPath = path.replace(/^\/+/, '');
+  try {
+    const data = await invoke<Uint8Array>('api_binary_request', {
+      request: { method: 'GET', path: normalizedPath, body: undefined },
+    });
+    return { data };
+  } catch (error) {
+    throw normalizeNativeError(error, 'Unable to download the PDF');
+  }
+}
+
 function encodeUploadMetadata(value: unknown): string {
   const bytes = new TextEncoder().encode(JSON.stringify(value));
   let binary = '';
@@ -91,6 +104,7 @@ export async function uploadFile<T>(
 
 export const apiRag: ApiClient = {
   get: <T>(path: string) => request<T>('GET', path),
+  getBinary: requestBinary,
   post: <T>(path: string, body?: unknown) => {
     if (body instanceof FormData) return uploadFile<T>(path, body);
     return request<T>('POST', path, body);
