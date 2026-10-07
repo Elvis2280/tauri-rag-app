@@ -111,6 +111,14 @@ jobs:
           tagName: v__VERSION__
           releaseName: RAG Desktop v__VERSION__
           releaseBody: |
+            Changes since v0.1.11:
+
+            - Preview PDF, image, and Markdown files directly from the workspace tree. PDF and image previews include download controls; images also support zooming.
+            - Warn before uploading a file whose name already exists in the selected workspace, with options to continue or cancel.
+            - Choose a workspace in the upload and chat flows, with loading, error, and retry states when workspaces cannot be fetched.
+            - Show workspace names and processing messages in upload history, alongside file and page status.
+            - Add typed document and workspace helpers, file actions, and coverage for the new viewers and upload flows.
+
             Download the installer for your operating system:
 
             - Windows x64: `windows-x64`

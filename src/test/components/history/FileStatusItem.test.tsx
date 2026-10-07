@@ -25,7 +25,7 @@ describe("FileStatusItem", () => {
     expect(workspaceBadge).toHaveAttribute("data-variant", "secondary");
     expect(
       screen.getByText(
-        `Page: ${entry.pageNumber} / ${entry.totalPages} · Status: ${entry.status}`,
+        `Page: ${entry.pageNumber} / ${entry.totalPages} · ${entry.message} · Status: ${entry.status}`,
       ),
     ).toBeInTheDocument();
   });
@@ -48,7 +48,7 @@ describe("FileStatusItem", () => {
     );
     expect(screen.getByTitle(entry.file_id)).toHaveTextContent("Unknown file");
     expect(
-      screen.getByText(`Page: — / — · Status: ${entry.status}`),
+      screen.getByText(`Page: — / — · ${entry.message} · Status: ${entry.status}`),
     ).toBeInTheDocument();
   });
 
@@ -148,7 +148,7 @@ describe("FileStatusItem", () => {
     // 3. ASSERT
     expect(
       screen.getByText(
-        `Page: — / ${entry.totalPages} · Status: ${entry.status}`,
+        `Page: — / ${entry.totalPages} · ${entry.message} · Status: ${entry.status}`,
       ),
     ).toBeInTheDocument();
     expect(screen.queryByRole("progressbar")).not.toBeInTheDocument();
