@@ -1,5 +1,7 @@
 export const FILE_STATUS = {
   FILE_UPLOADED: "file_uploaded",
+  RETRY_QUEUED: "retry_queued",
+  RETRY_RUNNING: "retry_running",
   FILE_CONVERSION_STARTED: "file_conversion_started",
   FILE_CONVERSION_FINISHED: "file_conversion_finished",
   OCR_STARTED: "ocr_started",

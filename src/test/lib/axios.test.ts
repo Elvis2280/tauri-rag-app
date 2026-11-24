@@ -1,7 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { faker } from '@faker-js/faker';
 
-const { invokeMock } = vi.hoisted(() => ({ invokeMock: vi.fn() }));
+const { invokeMock, logErrorMock } = vi.hoisted(() => ({
+  invokeMock: vi.fn(),
+  logErrorMock: vi.fn(),
+}));
 
 vi.mock('@tauri-apps/api/core', () => ({
   Channel: class {
@@ -9,6 +12,8 @@ vi.mock('@tauri-apps/api/core', () => ({
   },
   invoke: invokeMock,
 }));
+
+vi.mock('@tauri-apps/plugin-log', () => ({ error: logErrorMock }));
 
 import apiRag, {
   ApiError,
@@ -19,10 +24,12 @@ import apiRag, {
   updateServerHost,
   validateSavedAccess,
 } from '@/lib/axios';
+import { logFrontendFailure, openLogsFolder } from '@/lib/errorLogging';
 
 describe('native API client', () => {
   beforeEach(() => {
     invokeMock.mockReset();
+    logErrorMock.mockReset();
   });
 
   it('sends typed JSON requests through Tauri without exposing credentials', async () => {
@@ -89,6 +96,121 @@ describe('native API client', () => {
     await expect(request).rejects.toThrow(nativeMessage);
   });
 
+  it('logs an HTTP request failure without writing response details or query data', async () => {
+    // 1. ARRANGE
+    const secret = faker.string.alphanumeric({ length: 32 });
+    const privateDetail = `request rejected ${secret}`;
+    invokeMock.mockResolvedValueOnce({
+      status: 403,
+      body: { detail: privateDetail, api_key: secret },
+    });
+
+    // 2. ACT
+    const request = apiRag.get(`/workspace/list?api_key=${secret}`);
+    await expect(request).rejects.toBeInstanceOf(ApiError);
+
+    // 3. ASSERT
+    expect(logErrorMock).toHaveBeenCalledTimes(1);
+    const loggedEntry = String(logErrorMock.mock.calls[0]?.[0]);
+    expect(loggedEntry).toContain('"stage":"request"');
+    expect(loggedEntry).toContain('"method":"GET"');
+    expect(loggedEntry).toContain('"path":"/workspace/list"');
+    expect(loggedEntry).toContain('"status":403');
+    expect(loggedEntry).toContain('"reason":"http"');
+    expect(loggedEntry).not.toContain(secret);
+    expect(loggedEntry).not.toContain(privateDetail);
+  });
+
+  it('preserves binary HTTP status and logs only safe download fields', async () => {
+    // 1. ARRANGE
+    const documentId = faker.string.uuid();
+    const secret = faker.string.alphanumeric({ length: 32 });
+    invokeMock.mockRejectedValueOnce({
+      status: 404,
+      reason: 'http',
+      message: `not found ${secret}`,
+    });
+
+    // 2. ACT
+    const request = apiRag.getBinary(`/documents/${documentId}/pdf?key=${secret}`);
+    await expect(request).rejects.toMatchObject({ status: 404, reason: 'http' });
+
+    // 3. ASSERT
+    expect(logErrorMock).toHaveBeenCalledTimes(1);
+    const loggedEntry = String(logErrorMock.mock.calls[0]?.[0]);
+    expect(loggedEntry).toContain('"stage":"download"');
+    expect(loggedEntry).toContain('"path":"/documents/:id/pdf"');
+    expect(loggedEntry).toContain('"status":404');
+    expect(loggedEntry).toContain('"reason":"http"');
+    expect(loggedEntry).not.toContain(secret);
+    expect(loggedEntry).not.toContain(documentId);
+  });
+
+  it('logs a binary network failure without an HTTP status', async () => {
+    // 1. ARRANGE
+    invokeMock.mockRejectedValueOnce('Unable to reach the RAG API');
+
+    // 2. ACT
+    const request = apiRag.getBinary('/documents/document-id/images');
+    await expect(request).rejects.toThrow('Unable to reach the RAG API');
+
+    // 3. ASSERT
+    expect(logErrorMock).toHaveBeenCalledTimes(1);
+    expect(String(logErrorMock.mock.calls[0]?.[0])).toContain('"status":null');
+    expect(String(logErrorMock.mock.calls[0]?.[0])).toContain('"reason":"network"');
+  });
+
+  it('logs an invalid binary response with its successful HTTP status', async () => {
+    // 1. ARRANGE
+    invokeMock.mockRejectedValueOnce({
+      status: 200,
+      reason: 'invalid_response',
+      message: 'The downloaded file is not a valid PDF',
+    });
+
+    // 2. ACT
+    const request = apiRag.getBinary('/documents/document-id/pdf');
+    await expect(request).rejects.toMatchObject({
+      status: 200,
+      reason: 'invalid_response',
+    });
+
+    // 3. ASSERT
+    const loggedEntry = String(logErrorMock.mock.calls[0]?.[0]);
+    expect(loggedEntry).toContain('"stage":"download"');
+    expect(loggedEntry).toContain('"status":200');
+    expect(loggedEntry).toContain('"reason":"invalid_response"');
+    expect(loggedEntry).not.toContain('valid PDF');
+  });
+
+  it('does not let a local log write failure affect application behavior', async () => {
+    // 1. ARRANGE
+    logErrorMock.mockRejectedValueOnce(new Error(faker.lorem.sentence()));
+
+    // 2. ACT
+    const logging = logFrontendFailure({
+      stage: 'request',
+      method: 'GET',
+      path: '/workspace/list',
+      status: null,
+      reason: 'network',
+    });
+
+    // 3. ASSERT
+    await expect(logging).resolves.toBeUndefined();
+  });
+
+  it('opens the log directory through the dedicated native command', async () => {
+    // 1. ARRANGE
+    invokeMock.mockResolvedValueOnce(undefined);
+
+    // 2. ACT
+    await openLogsFolder();
+
+    // 3. ASSERT
+    expect(invokeMock).toHaveBeenCalledWith('open_logs_folder');
+  });
+
   it('normalizes Tauri string and object rejections without exposing extra data', () => {
     // 1. ARRANGE
     const nativeMessage = faker.lorem.sentence();
@@ -115,6 +237,28 @@ describe('native API client', () => {
 
     // 3. ASSERT
     await expect(request).rejects.toThrow(nativeMessage);
+  });
+
+  it('logs saved-access validation failures without writing credential errors', async () => {
+    // 1. ARRANGE
+    const secret = faker.string.alphanumeric({ length: 32 });
+    invokeMock.mockRejectedValueOnce({
+      code: 'rejected',
+      status: 403,
+      message: `credential rejected ${secret}`,
+    });
+
+    // 2. ACT
+    await expect(validateSavedAccess()).rejects.toThrow(`credential rejected ${secret}`);
+
+    // 3. ASSERT
+    expect(logErrorMock).toHaveBeenCalledTimes(1);
+    const loggedEntry = String(logErrorMock.mock.calls[0]?.[0]);
+    expect(loggedEntry).toContain('"stage":"request"');
+    expect(loggedEntry).toContain('"path":"/workspace/list"');
+    expect(loggedEntry).toContain('"status":403');
+    expect(loggedEntry).toContain('"reason":"http"');
+    expect(loggedEntry).not.toContain(secret);
   });
 
   it('uses write-only native commands for API access settings', async () => {

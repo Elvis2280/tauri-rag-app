@@ -53,14 +53,6 @@ async function fetchWorkspaceList(): Promise<ApiWorkspaceListResponse> {
   return response.data;
 }
 
-async function fetchWorkspaceTree(): Promise<Workspace[]> {
-  const response = await apiRag.get<ApiWorkspaceTreeResponse>(
-    WORKSPACE_ENDPOINTS.tree,
-  );
-
-  return mapTreeResponseToUI(response.data).workspaces;
-}
-
 async function postDisableWorkspace(
   workspaceId: string,
 ): Promise<DisableWorkspaceResponse> {
@@ -151,7 +143,8 @@ export function useWorkspaceList(
 export function useWorkspaceTree(): WorkspaceQueryResult<Workspace[] | null> {
   const query = useQuery({
     queryKey: workspaceKeys.tree(),
-    queryFn: fetchWorkspaceTree,
+    queryFn: async () => (await apiRag.get<ApiWorkspaceTreeResponse>(WORKSPACE_ENDPOINTS.tree)).data,
+    select: (response) => mapTreeResponseToUI(response).workspaces,
   });
 
   useWorkspaceQueryErrorToast(query.error, WORKSPACE_TREE_ERROR);

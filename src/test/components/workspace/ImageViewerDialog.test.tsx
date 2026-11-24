@@ -7,13 +7,16 @@ import ImageViewerDialog, {
   type LoadedImage,
 } from "@/components/workspace/ImageViewerDialog";
 
-const { mockedToastError } = vi.hoisted(() => ({
+const { mockedToastError, mockedLogError } = vi.hoisted(() => ({
   mockedToastError: vi.fn(),
+  mockedLogError: vi.fn(),
 }));
 
 vi.mock("sonner", () => ({
   toast: { error: mockedToastError },
 }));
+
+vi.mock("@tauri-apps/plugin-log", () => ({ error: mockedLogError }));
 
 const mockCreateObjectURL = vi.fn();
 const mockRevokeObjectURL = vi.fn();
@@ -53,6 +56,7 @@ function StatefulImageViewer({ image }: { image: LoadedImage }) {
 describe("ImageViewerDialog", () => {
   beforeEach(() => {
     mockedToastError.mockReset();
+    mockedLogError.mockReset();
     mockCreateObjectURL.mockReset();
     mockRevokeObjectURL.mockReset();
     mockCreateObjectURL.mockReturnValue("blob:workspace-image");
@@ -184,6 +188,10 @@ describe("ImageViewerDialog", () => {
     );
     expect(onDownload).toHaveBeenCalledTimes(1);
     expect(mockedToastError).toHaveBeenCalledTimes(1);
+    expect(mockedLogError).toHaveBeenCalledTimes(1);
+    expect(String(mockedLogError.mock.calls[0]?.[0])).toContain(
+      '"stage":"rendering","method":"GET","path":"/documents/:id/images","status":null,"reason":"render"',
+    );
   });
 
   it("revokes the image URL when the dialog closes", async () => {

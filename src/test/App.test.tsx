@@ -1,26 +1,43 @@
 import { faker } from "@faker-js/faker";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { QueryClient } from "@tanstack/react-query";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import App from "@/App";
 import { useWorkspaceList } from "@/hooks/useWorkspace";
 import { useApiAccess } from "@/hooks/useApiAccess";
+import { useChatStore } from "@/context/chatStore";
+import { useGlobalContext } from "@/context/GlobalContext";
+import { buildChatMessage } from "@/test/factories/chat.factory";
+import { buildWorkspaceListItem } from "@/test/factories/workspace.factory";
+import { toast } from "sonner";
+import type { ConfigurationModalProps } from "@/components/configuration/ConfigurationModal";
+
+const { queryClientRef } = vi.hoisted(() => ({
+  queryClientRef: { current: null as QueryClient | null },
+}));
 
 vi.mock("@/hooks/useWorkspace", () => ({
   useWorkspaceList: vi.fn(),
   workspaceKeys: { all: ["workspaces"] },
 }));
 vi.mock("@/hooks/useApiAccess", () => ({ useApiAccess: vi.fn() }));
-vi.mock("@tanstack/react-query", () => ({
-  useQueryClient: () => ({ invalidateQueries: vi.fn() }),
+vi.mock("@tanstack/react-query", async (importOriginal) => ({
+  ...await importOriginal<typeof import("@tanstack/react-query")>(),
+  useQueryClient: () => queryClientRef.current,
 }));
+vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 vi.mock("@/components/common/Layout", () => ({
   default: ({ interactive = true }: { interactive?: boolean }) => (
     <div>{interactive ? "Interactive shell" : "Inactive shell"}</div>
   ),
 }));
-vi.mock("@/components/auth/ApiAccessModal", () => ({
-  default: ({ required = false }: { required?: boolean }) => (
-    <div>{required ? "Required API access" : "Optional API access"}</div>
+vi.mock("@/components/configuration/ConfigurationModal", () => ({
+  default: ({ required = false, onValidateAndClose }: ConfigurationModalProps) => (
+    <div>
+      {required ? "Required Configuration" : "Optional Configuration"}
+      <button onClick={() => void onValidateAndClose()}>Done</button>
+    </div>
   ),
 }));
 vi.mock("@/components/upload/UploadSection", () => ({
@@ -45,6 +62,12 @@ const mockedUseApiAccess = vi.mocked(useApiAccess);
 describe("App workspace bootstrap", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    queryClientRef.current = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    localStorage.clear();
+    useChatStore.getState().clearMessages();
+    useGlobalContext.setState({ workspaces: [], selectedWorkspace: null });
     mockedUseApiAccess.mockReturnValue({
       loading: false,
       configured: true,
@@ -97,7 +120,47 @@ describe("App workspace bootstrap", () => {
 
     // 3. ASSERT
     expect(screen.getByText("Inactive shell")).toBeInTheDocument();
-    expect(screen.getByText("Required API access")).toBeInTheDocument();
+    expect(screen.getByText("Required Configuration")).toBeInTheDocument();
     expect(mockedUseWorkspaceList).not.toHaveBeenCalled();
   });
+
+  it.each([
+    { succeeds: true, required: false },
+    { succeeds: false, required: false },
+    { succeeds: true, required: true },
+    { succeeds: false, required: true },
+  ])(
+    "clears old environment data (validation succeeds: $succeeds, required setup: $required)",
+    async ({ succeeds, required }) => {
+      // 1. ARRANGE
+      const user = userEvent.setup();
+      const workspace = buildWorkspaceListItem();
+      const message = buildChatMessage();
+      const failure = new Error(faker.lorem.sentence());
+      const access = mockedUseApiAccess();
+      mockedUseApiAccess.mockReturnValue({ ...access, configured: !required, setupPending: required });
+      vi.mocked(access.checkSavedAccess).mockImplementation(async () => {
+        expect(useGlobalContext.getState().workspaces).toEqual([]);
+        expect(useChatStore.getState().messageOrder).toEqual([]);
+        if (!succeeds) throw failure;
+        return true;
+      });
+      useGlobalContext.setState({ workspaces: [workspace], selectedWorkspace: workspace.id });
+      useChatStore.getState().addMessage(message, message.id);
+      localStorage.setItem("workspace", workspace.id);
+      queryClientRef.current!.setQueryData(["workspaces", "list"], [workspace]);
+      render(<App />);
+
+      // 2. ACT
+      await user.click(screen.getByRole("button", { name: "Done" }));
+
+      // 3. ASSERT
+      await waitFor(() => expect(access.checkSavedAccess).toHaveBeenCalledTimes(1));
+      expect(useGlobalContext.getState().selectedWorkspace).toBeNull();
+      expect(localStorage.getItem("workspace")).toBeNull();
+      expect(localStorage.getItem("rag-chat")).toBeNull();
+      expect(queryClientRef.current!.getQueryData(["workspaces", "list"])).toBeUndefined();
+      expect(succeeds ? toast.success : toast.error).toHaveBeenCalled();
+    },
+  );
 });

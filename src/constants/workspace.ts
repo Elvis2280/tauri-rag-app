@@ -1,3 +1,5 @@
+export const WORKSPACE_STORAGE_KEY = "workspace";
+
 export const WORKSPACE_TREE_LABELS = {
   originalFile: "Original file",
   translation: "Translation",

@@ -11,6 +11,8 @@ import {
   IMAGE_VIEWER_ZOOM_STEP,
 } from "@/constants/image";
 import { Button } from "@/components/ui/button";
+import { logFrontendFailure } from "@/lib/errorLogging";
+import { DOCUMENT_ENDPOINTS } from "@/lib/api/endpoints";
 import {
   Dialog,
   DialogClose,
@@ -177,6 +179,13 @@ export default function ImageViewerDialog({
     setHasRenderError(true);
     if (image && renderErrorFileRef.current !== image.fileId) {
       renderErrorFileRef.current = image.fileId;
+      void logFrontendFailure({
+        stage: "rendering",
+        method: "GET",
+        path: DOCUMENT_ENDPOINTS.image(image.fileId),
+        status: null,
+        reason: "render",
+      });
       toast.error(IMAGE_MESSAGES.renderError, {
         description: image.name,
       });

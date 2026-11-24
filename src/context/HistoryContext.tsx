@@ -1,5 +1,4 @@
 import { create } from "zustand";
-import { persist } from "zustand/middleware";
 import { FILE_STATUS } from "@/types/FileTypes";
 import type { HistoryEntry } from "@/types/FileTypes";
 
@@ -11,11 +10,11 @@ type Actions = {
   registerFileId: (id: string) => void;
   updateEntry: (id: string, patch: Partial<HistoryEntry>) => void;
   markFailed: (id: string, reason: string) => void;
+  markRetryQueued: (id: string) => void;
   removeEntry: (id: string) => void;
 };
 
 export const useHistory = create<State & Actions>()(
-  persist(
     (set) => ({
       entries: [],
       registerFileId: (id) =>
@@ -74,11 +73,13 @@ export const useHistory = create<State & Actions>()(
           };
           return { entries: next };
         }),
+      markRetryQueued: (id) =>
+        set((s) => ({ entries: s.entries.map((entry) => entry.file_id === id
+          ? { ...entry, status: FILE_STATUS.RETRY_QUEUED, message: "Retry queued", error: null, step: null, stage: null, pageNumber: null, timestamp: new Date().toISOString() }
+          : entry) })),
       removeEntry: (id) =>
         set((s) => ({
           entries: s.entries.filter((e) => e.file_id !== id),
         })),
     }),
-    { name: "rag-history" },
-  ),
 );

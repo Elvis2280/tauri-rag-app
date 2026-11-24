@@ -29,25 +29,28 @@ describe("Layout", () => {
     expect(title).toHaveClass("neon-text-glow", "text-primary");
   });
 
-  it("opens API access settings without clearing credentials", async () => {
+  it("opens Configuration from the sidebar", async () => {
     // 1. ARRANGE
     const user = userEvent.setup();
-    const onManageApiAccess = vi.fn();
+    const onOpenConfiguration = vi.fn();
     render(
       <MemoryRouter initialEntries={["/chat"]}>
         <Routes>
           <Route
             path="*"
-            element={<Layout onManageApiAccess={onManageApiAccess} />}
+            element={<Layout onOpenConfiguration={onOpenConfiguration} />}
           />
         </Routes>
       </MemoryRouter>,
     );
 
     // 2. ACT
-    await user.click(screen.getByRole("button", { name: "API access" }));
+    await user.click(screen.getByRole("button", { name: "Configuration" }));
 
     // 3. ASSERT
-    expect(onManageApiAccess).toHaveBeenCalledTimes(1);
+    expect(onOpenConfiguration).toHaveBeenCalledTimes(1);
+    expect(
+      screen.queryByRole("button", { name: "Open logs folder" }),
+    ).not.toBeInTheDocument();
   });
 });

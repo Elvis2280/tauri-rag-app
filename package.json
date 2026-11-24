@@ -1,7 +1,7 @@
 {
   "name": "rag-desktop",
   "private": true,
-  "version": "0.1.13",
+  "version": "0.1.14",
   "type": "module",
   "packageManager": "pnpm@10.28.2",
   "scripts": {
@@ -24,6 +24,7 @@
     "@tauri-apps/api": "^2.12.1",
     "@tauri-apps/plugin-dialog": "^2.8.1",
     "@tauri-apps/plugin-fs": "^2.6.0",
+    "@tauri-apps/plugin-log": "^2.10.1",
     "@tauri-apps/plugin-opener": "^2",
     "axios": "^1.18.1",
     "class-variance-authority": "^0.7.1",

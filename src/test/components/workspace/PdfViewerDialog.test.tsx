@@ -7,8 +7,9 @@ import PdfViewerDialog, {
   type LoadedPdf,
 } from "@/components/workspace/PdfViewerDialog";
 
-const { mockedToastError } = vi.hoisted(() => ({
+const { mockedToastError, mockedLogError } = vi.hoisted(() => ({
   mockedToastError: vi.fn(),
+  mockedLogError: vi.fn(),
 }));
 const mockOnDownload = vi.fn();
 
@@ -17,6 +18,8 @@ let resizeObserverCallback: ResizeObserverCallback | null = null;
 vi.mock("sonner", () => ({
   toast: { error: mockedToastError },
 }));
+
+vi.mock("@tauri-apps/plugin-log", () => ({ error: mockedLogError }));
 
 vi.mock("react-pdf", () => ({
   pdfjs: { GlobalWorkerOptions: {} },
@@ -137,6 +140,7 @@ function InitiallyClosedViewer({ pdf }: { pdf: LoadedPdf }) {
 describe("PdfViewerDialog", () => {
   beforeEach(() => {
     mockedToastError.mockReset();
+    mockedLogError.mockReset();
     mockOnDownload.mockReset();
     resizeObserverCallback = null;
     vi.stubGlobal(
@@ -363,6 +367,10 @@ describe("PdfViewerDialog", () => {
     expect(mockedToastError).toHaveBeenCalledWith(
       "Failed to render PDF",
       expect.objectContaining({ description: expect.any(String) }),
+    );
+    expect(mockedLogError).toHaveBeenCalledTimes(1);
+    expect(String(mockedLogError.mock.calls[0]?.[0])).toContain(
+      '"stage":"rendering","method":"GET","path":"/documents/:id/pdf","status":null,"reason":"render"',
     );
     expect(screen.getByText("Unable to display this PDF.")).toBeInTheDocument();
   });

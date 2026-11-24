@@ -1,9 +1,22 @@
 import { faker } from "@faker-js/faker";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
-import ApiAccessModal from "@/components/auth/ApiAccessModal";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import ConfigurationModal from "@/components/configuration/ConfigurationModal";
 import { API_ACCESS_MASK } from "@/constants/apiAccess";
+import { CONFIGURATION_LABELS } from "@/constants/configuration";
+
+const { openLogsFolderMock, toastErrorMock } = vi.hoisted(() => ({
+  openLogsFolderMock: vi.fn(),
+  toastErrorMock: vi.fn(),
+}));
+
+vi.mock("@/lib/errorLogging", () => ({
+  openLogsFolder: openLogsFolderMock,
+}));
+vi.mock("sonner", () => ({
+  toast: { error: toastErrorMock },
+}));
 
 function buildProps() {
   return {
@@ -18,13 +31,17 @@ function buildProps() {
   };
 }
 
-describe("ApiAccessModal", () => {
+describe("ConfigurationModal", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
   it("shows a fixed masked key and the current host without exposing a secret", () => {
     // 1. ARRANGE
     const props = buildProps();
 
     // 2. ACT
-    render(<ApiAccessModal {...props} />);
+    render(<ConfigurationModal {...props} />);
 
     // 3. ASSERT
     expect(screen.getByLabelText("API key")).toHaveValue(API_ACCESS_MASK);
@@ -35,12 +52,58 @@ describe("ApiAccessModal", () => {
     ).toBeInTheDocument();
   });
 
+  it("shows the configuration categories in order", () => {
+    // 1. ARRANGE
+    const props = buildProps();
+
+    // 2. ACT
+    render(<ConfigurationModal {...props} />);
+
+    // 3. ASSERT
+    expect(
+      screen.getAllByRole("heading").map((heading) => heading.textContent),
+    ).toEqual([
+      CONFIGURATION_LABELS.title,
+      CONFIGURATION_LABELS.connectionCategory,
+      CONFIGURATION_LABELS.llmModelsCategory,
+      CONFIGURATION_LABELS.logsCategory,
+    ]);
+  });
+
+  it("shows only connection settings during required first-run setup", () => {
+    // 1. ARRANGE
+    const props = buildProps();
+
+    // 2. ACT
+    render(<ConfigurationModal {...props} required serverHost="" />);
+
+    // 3. ASSERT
+    expect(
+      screen.getByRole("heading", {
+        name: CONFIGURATION_LABELS.connectionCategory,
+      }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", {
+        name: CONFIGURATION_LABELS.llmModelsCategory,
+      }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: CONFIGURATION_LABELS.logsCategory }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", {
+        name: CONFIGURATION_LABELS.openLogsFolder,
+      }),
+    ).not.toBeInTheDocument();
+  });
+
   it("clears, masks, and saves a replacement API key", async () => {
     // 1. ARRANGE
     const user = userEvent.setup();
     const props = buildProps();
     const apiKey = faker.string.alphanumeric({ length: 40 });
-    render(<ApiAccessModal {...props} />);
+    render(<ConfigurationModal {...props} />);
 
     // 2. ACT
     await user.click(screen.getByRole("button", { name: "Update API key" }));
@@ -59,7 +122,7 @@ describe("ApiAccessModal", () => {
     const user = userEvent.setup();
     const props = buildProps();
     const draftHost = `${faker.internet.ipv4()}:${faker.internet.port()}`;
-    render(<ApiAccessModal {...props} />);
+    render(<ConfigurationModal {...props} />);
 
     // 2. ACT
     await user.click(screen.getByRole("button", { name: "Update Server Host" }));
@@ -77,7 +140,7 @@ describe("ApiAccessModal", () => {
     const user = userEvent.setup();
     const props = buildProps();
     const serverHost = `${faker.internet.ipv4()}:${faker.internet.port()}`;
-    render(<ApiAccessModal {...props} />);
+    render(<ConfigurationModal {...props} />);
 
     // 2. ACT
     await user.click(screen.getByRole("button", { name: "Update Server Host" }));
@@ -99,13 +162,13 @@ describe("ApiAccessModal", () => {
     props.onUpdateServerHost.mockImplementation(async () => {
       props.serverHost = canonicalHost;
     });
-    const { rerender } = render(<ApiAccessModal {...props} />);
+    const { rerender } = render(<ConfigurationModal {...props} />);
 
     // 2. ACT
     await user.click(screen.getByRole("button", { name: "Update Server Host" }));
     await user.type(screen.getByLabelText("Server Host"), enteredHost);
     await user.click(screen.getByRole("button", { name: "Save" }));
-    rerender(<ApiAccessModal {...props} />);
+    rerender(<ConfigurationModal {...props} />);
 
     // 3. ASSERT
     expect(props.onUpdateServerHost).toHaveBeenCalledWith(enteredHost);
@@ -118,15 +181,22 @@ describe("ApiAccessModal", () => {
     const props = buildProps();
     const apiKey = faker.string.alphanumeric({ length: 32 });
     const serverHost = `${faker.internet.ipv4()}:${faker.internet.port()}`;
-    render(<ApiAccessModal {...props} required serverHost="" />);
+    const { rerender } = render(
+      <ConfigurationModal {...props} required serverHost="" />,
+    );
+    const doneButton = screen.getByRole("button", { name: "Done" });
 
     // 2. ACT
     await user.type(screen.getByLabelText("API key"), apiKey);
     await user.type(screen.getByLabelText("Server Host"), serverHost);
     await user.click(screen.getByRole("button", { name: "Save" }));
+    rerender(<ConfigurationModal {...props} required serverHost={serverHost} />);
+    await user.click(doneButton);
 
     // 3. ASSERT
     expect(props.onSetup).toHaveBeenCalledWith(apiKey, serverHost);
+    expect(props.onOpenChange).toHaveBeenCalledWith(false);
+    expect(props.onValidateAndClose).toHaveBeenCalledTimes(1);
   });
 
   it("keeps the edit open and reports a rejected update", async () => {
@@ -136,7 +206,7 @@ describe("ApiAccessModal", () => {
     const apiKey = faker.string.alphanumeric({ length: 32 });
     const message = faker.lorem.sentence();
     props.onUpdateApiKey.mockRejectedValueOnce(new Error(message));
-    render(<ApiAccessModal {...props} />);
+    render(<ConfigurationModal {...props} />);
 
     // 2. ACT
     await user.click(screen.getByRole("button", { name: "Update API key" }));
@@ -153,14 +223,14 @@ describe("ApiAccessModal", () => {
     const user = userEvent.setup();
     const props = buildProps();
     const apiKey = faker.string.alphanumeric({ length: 32 });
-    const { rerender } = render(<ApiAccessModal {...props} />);
+    const { rerender } = render(<ConfigurationModal {...props} />);
     await user.click(screen.getByRole("button", { name: "Update API key" }));
     await user.type(screen.getByLabelText("API key"), apiKey);
 
     // 2. ACT
     await user.click(screen.getByRole("button", { name: "Close" }));
-    rerender(<ApiAccessModal {...props} open={false} />);
-    rerender(<ApiAccessModal {...props} open />);
+    rerender(<ConfigurationModal {...props} open={false} />);
+    rerender(<ConfigurationModal {...props} open />);
 
     // 3. ASSERT
     expect(props.onOpenChange).toHaveBeenCalledWith(false);
@@ -172,7 +242,7 @@ describe("ApiAccessModal", () => {
     // 1. ARRANGE
     const user = userEvent.setup();
     const props = buildProps();
-    render(<ApiAccessModal {...props} />);
+    render(<ConfigurationModal {...props} />);
 
     // 2. ACT
     await user.click(screen.getByRole("button", { name: "Done" }));
@@ -180,5 +250,49 @@ describe("ApiAccessModal", () => {
     // 3. ASSERT
     expect(props.onOpenChange).toHaveBeenCalledWith(false);
     expect(props.onValidateAndClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("opens the logs folder without closing Configuration", async () => {
+    // 1. ARRANGE
+    const user = userEvent.setup();
+    const props = buildProps();
+    openLogsFolderMock.mockResolvedValueOnce(undefined);
+    render(<ConfigurationModal {...props} />);
+
+    // 2. ACT
+    await user.click(
+      screen.getByRole("button", {
+        name: CONFIGURATION_LABELS.openLogsFolder,
+      }),
+    );
+
+    // 3. ASSERT
+    expect(openLogsFolderMock).toHaveBeenCalledTimes(1);
+    expect(props.onOpenChange).not.toHaveBeenCalled();
+    expect(toastErrorMock).not.toHaveBeenCalled();
+  });
+
+  it("reports a logs folder failure and leaves Configuration open", async () => {
+    // 1. ARRANGE
+    const user = userEvent.setup();
+    const props = buildProps();
+    openLogsFolderMock.mockRejectedValueOnce(new Error(faker.lorem.sentence()));
+    render(<ConfigurationModal {...props} />);
+
+    // 2. ACT
+    await user.click(
+      screen.getByRole("button", {
+        name: CONFIGURATION_LABELS.openLogsFolder,
+      }),
+    );
+
+    // 3. ASSERT
+    expect(toastErrorMock).toHaveBeenCalledWith(
+      CONFIGURATION_LABELS.logsFolderError,
+    );
+    expect(props.onOpenChange).not.toHaveBeenCalled();
+    expect(
+      screen.getByRole("heading", { name: CONFIGURATION_LABELS.title }),
+    ).toBeInTheDocument();
   });
 });

@@ -1,4 +1,4 @@
-import { useCallback } from 'react';
+import { useCallback, useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { save } from '@tauri-apps/plugin-dialog';
 import { writeFile } from '@tauri-apps/plugin-fs';
@@ -10,6 +10,8 @@ import {
 } from '@/constants/document';
 import apiRag, { normalizeNativeError } from '@/lib/axios';
 import { DOCUMENT_ENDPOINTS } from '@/lib/api/endpoints';
+import { extractApiErrorMessage } from '@/lib/api/errors';
+import { useHistory } from '@/context/HistoryContext';
 
 type UseDocumentPdfResult = {
   loadPdf: (documentId: string) => Promise<Uint8Array>;
@@ -23,6 +25,31 @@ export type SavePdfInput = {
   name: string;
   data: Uint8Array;
 };
+
+type RetryDocumentResponse = { document_id: string; task_id: string };
+
+async function retryDocument(documentId: string): Promise<RetryDocumentResponse> {
+  const response = await apiRag.post<RetryDocumentResponse>(DOCUMENT_ENDPOINTS.retry(documentId));
+  return response.data;
+}
+
+export function useRetryDocument() {
+  const [pendingDocumentId, setPendingDocumentId] = useState<string | null>(null);
+  const retry = useCallback(async (documentId: string) => {
+    setPendingDocumentId(documentId);
+    try {
+      await retryDocument(documentId);
+      useHistory.getState().markRetryQueued(documentId);
+    } catch (error) {
+      toast.error('Failed to retry file process', {
+        description: extractApiErrorMessage(error, 'Failed to retry file process'),
+      });
+    } finally {
+      setPendingDocumentId(null);
+    }
+  }, []);
+  return { retryDocument: retry, isPending: pendingDocumentId !== null, pendingDocumentId };
+}
 
 async function fetchDocumentPdf(documentId: string): Promise<Uint8Array> {
   const endpoint = DOCUMENT_ENDPOINTS.pdf(documentId);

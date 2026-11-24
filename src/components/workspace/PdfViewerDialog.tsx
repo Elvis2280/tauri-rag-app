@@ -24,6 +24,8 @@ import {
   PDF_VIEWER_ZOOM_STEP,
 } from "@/constants/document";
 import { Button } from "@/components/ui/button";
+import { logFrontendFailure } from "@/lib/errorLogging";
+import { DOCUMENT_ENDPOINTS } from "@/lib/api/endpoints";
 import {
   Dialog,
   DialogClose,
@@ -125,6 +127,13 @@ export default function PdfViewerDialog({
     setHasRenderError(true);
     if (pdf && renderErrorDocumentRef.current !== pdf.documentId) {
       renderErrorDocumentRef.current = pdf.documentId;
+      void logFrontendFailure({
+        stage: "rendering",
+        method: "GET",
+        path: DOCUMENT_ENDPOINTS.pdf(pdf.documentId),
+        status: null,
+        reason: "render",
+      });
       toast.error(DOCUMENT_MESSAGES.renderError, {
         description: error.message,
       });

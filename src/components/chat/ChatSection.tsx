@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useChatStore } from "@/context/chatStore";
+import { WORKSPACE_STORAGE_KEY } from "@/constants/workspace";
 import useMessage from "@/hooks/useMessage";
 import { useWorkspaceList } from "@/hooks/useWorkspace";
 import { useGlobalContext } from "@/context/GlobalContext";
@@ -34,12 +35,12 @@ export default function ChatSection() {
   };
 
   const handleSetWorkspace = (workspaceId: string) => {
-    window.localStorage.setItem("workspace", workspaceId)
+    window.localStorage.setItem(WORKSPACE_STORAGE_KEY, workspaceId)
     setWorkspaceId(workspaceId)
   }
 
   useEffect(() => {
-    const storedWorkspace = window.localStorage.getItem("workspace")
+    const storedWorkspace = window.localStorage.getItem(WORKSPACE_STORAGE_KEY)
     if (storedWorkspace) {
       setWorkspaceId(storedWorkspace)
     }

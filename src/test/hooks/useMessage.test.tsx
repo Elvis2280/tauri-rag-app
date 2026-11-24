@@ -214,6 +214,41 @@ describe("useMessage", () => {
     });
   });
 
+  it.each([true, false])("ignores an old request after messages are cleared (success: %s)", async (succeeds) => {
+    // 1. ARRANGE
+    const workspace = buildWorkspace();
+    const userMessage = buildChatMessage();
+    const response: SendMessageSuccessResponse = {
+      response: buildChatMessage().content,
+      english_markdown_id: buildChatMessage().id,
+      japanese_markdown_id: buildChatMessage().id,
+    };
+    let finishRequest!: () => void;
+    mockedPost.mockImplementation(() => new Promise<AxiosResponse<typeof response>>((resolve, reject) => {
+      finishRequest = () => succeeds
+        ? resolve(createResponse(response))
+        : reject(new Error(userMessage.content));
+    }));
+    const { result } = renderHook(() => useMessage(), { wrapper: createWrapper() });
+
+    // 2. ACT
+    let requestPromise!: Promise<SendMessageSuccessResponse | void>;
+    act(() => {
+      requestPromise = result.current.sendMessage({ workspaceId: workspace.id, message: userMessage.content }).catch(() => undefined);
+    });
+    await waitFor(() => expect(mockedPost).toHaveBeenCalledTimes(1));
+    await act(async () => {
+      useChatStore.getState().clearMessages();
+      finishRequest();
+      await requestPromise;
+    });
+
+    // 3. ASSERT
+    expect(useChatStore.getState().messages).toEqual({});
+    expect(useChatStore.getState().messageOrder).toEqual([]);
+    expect(mockedToastError).not.toHaveBeenCalled();
+  });
+
   it("shows isPending and keeps only the pending user message before the response resolves", async () => {
     // 1. ARRANGE
     const workspace = buildWorkspace();

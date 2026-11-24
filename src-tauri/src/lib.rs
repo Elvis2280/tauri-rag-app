@@ -11,6 +11,8 @@ use reqwest::multipart::{Form, Part};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tauri::{ipc::Channel, Manager, State};
+use tauri_plugin_log::{RotationStrategy, Target, TargetKind};
+use tauri_plugin_opener::OpenerExt;
 use tokio::sync::Mutex;
 use tokio_tungstenite::tungstenite::client::IntoClientRequest;
 
@@ -31,23 +33,27 @@ type CredentialEntry = keyring::Entry;
 pub struct CredentialCommandError {
     pub code: String,
     pub message: String,
+    pub status: Option<u16>,
 }
 
 fn credential_error(code: &str, message: &str) -> CredentialCommandError {
     CredentialCommandError {
         code: code.to_string(),
         message: message.to_string(),
+        status: None,
     }
 }
 
 fn api_validation_error(status: u16) -> CredentialCommandError {
-    if matches!(status, 401 | 403) {
+    let mut error = if matches!(status, 401 | 403) {
         credential_error("rejected", "The API key was rejected")
     } else if status == 404 {
         credential_error("configuration", "The configured API endpoint was not found")
     } else {
         credential_error("backend", &format!("The API returned HTTP {status}"))
-    }
+    };
+    error.status = Some(status);
+    error
 }
 
 fn map_vault_error(code: &str, error: &keyring::Error) -> CredentialCommandError {
@@ -167,6 +173,26 @@ pub struct ApiResponse {
 }
 
 #[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BinaryApiError {
+    pub status: Option<u16>,
+    pub reason: String,
+    pub message: String,
+}
+
+fn binary_api_error(
+    status: Option<u16>,
+    reason: &str,
+    message: impl Into<String>,
+) -> BinaryApiError {
+    BinaryApiError {
+        status,
+        reason: reason.to_string(),
+        message: message.into(),
+    }
+}
+
+#[derive(Debug, Serialize)]
 pub struct ProgressEvent {
     pub payload: Option<Value>,
     pub error: Option<String>,
@@ -185,21 +211,30 @@ pub struct AppState {
 }
 
 fn endpoint_url(path: &str, api_base_url: &str) -> Result<reqwest::Url, String> {
-    if path.is_empty() || path.starts_with('/') || path.contains("..") || path.contains(':') {
+    let (route, query) = path.split_once('?').unwrap_or((path, ""));
+    if route.is_empty() || route.starts_with('/') || route.contains("..") || route.contains(':') {
         return Err("Invalid API path".to_string());
     }
 
-    let allowed = match path {
+    let allowed = match route {
         "workspace/list" | "workspace/tree" | "workspace" | "documents/upload" | "chat" => true,
+        value if value.starts_with("documents/") && value.ends_with("/retry") => {
+            let parts: Vec<&str> = value.split('/').collect();
+            parts.len() == 3 && parts[2] == "retry" && uuid::Uuid::parse_str(parts[1]).is_ok()
+        }
         value if value.starts_with("workspace/") => {
             let parts: Vec<&str> = value.split('/').collect();
             parts.len() == 3 && parts[2] == "disable" && uuid::Uuid::parse_str(parts[1]).is_ok()
         }
         value if value.starts_with("documents/") => {
             let parts: Vec<&str> = value.split('/').collect();
-            parts.len() == 3
-                && matches!(parts[2], "pdf" | "markdown" | "images")
-                && uuid::Uuid::parse_str(parts[1]).is_ok()
+            if parts.len() == 3 && parts[2] == "history" {
+                uuid::Uuid::parse_str(parts[1]).is_ok() && valid_history_query(query)
+            } else {
+                query.is_empty() && parts.len() == 3
+                    && matches!(parts[2], "pdf" | "markdown" | "images")
+                    && uuid::Uuid::parse_str(parts[1]).is_ok()
+            }
         }
         _ => false,
     };
@@ -207,8 +242,19 @@ fn endpoint_url(path: &str, api_base_url: &str) -> Result<reqwest::Url, String> 
         return Err("API endpoint is not allowed".to_string());
     }
 
-    reqwest::Url::parse(&format!("{api_base_url}/{path}"))
+    reqwest::Url::parse(&format!("{api_base_url}/{route}?{query}"))
         .map_err(|_| "Invalid configured API address".to_string())
+}
+
+fn valid_history_query(query: &str) -> bool {
+    query.split('&').all(|pair| {
+        let mut parts = pair.splitn(2, '=');
+        match (parts.next(), parts.next()) {
+            (Some("limit"), Some("50")) => true,
+            (Some("cursor"), Some(cursor)) => uuid::Uuid::parse_str(cursor).is_ok(),
+            _ => false,
+        }
+    })
 }
 
 fn validate_pdf_response(content_type: Option<&str>, bytes: &[u8]) -> Result<(), String> {
@@ -428,12 +474,11 @@ async fn api_request(
     let response = match request.method.as_str() {
         "GET" if request.body.is_none() => client.get(url).header("X-API-Key", key).send().await,
         "POST" => {
-            client
-                .post(url)
-                .header("X-API-Key", key)
-                .json(&request.body.unwrap_or(Value::Null))
-                .send()
-                .await
+            let builder = client.post(url).header("X-API-Key", key);
+            match request.body {
+                Some(body) => builder.json(&body).send().await,
+                None => builder.send().await,
+            }
         }
         _ => return Err("Unsupported API request".to_string()),
     }
@@ -446,42 +491,74 @@ async fn api_request(
 async fn api_binary_request(
     request: JsonApiRequest,
     settings: State<'_, AccessSettingsStore>,
-) -> Result<tauri::ipc::Response, String> {
+) -> Result<tauri::ipc::Response, BinaryApiError> {
     if request.method != "GET" || request.body.is_some() {
-        return Err("Unsupported binary API request".to_string());
+        return Err(binary_api_error(
+            None,
+            "request",
+            "Unsupported binary API request",
+        ));
     }
 
-    let (client, key) = authenticated_client().await?;
+    let (client, key) = authenticated_client()
+        .await
+        .map_err(|message| binary_api_error(None, "request", message))?;
     let config = settings.current().await;
-    let url = endpoint_url(&request.path, &config.api_base_url)?;
+    let url = endpoint_url(&request.path, &config.api_base_url)
+        .map_err(|message| binary_api_error(None, "request", message))?;
     let response = client
         .get(url)
         .header("X-API-Key", key)
         .send()
         .await
-        .map_err(|_| "Unable to reach the RAG API".to_string())?;
+        .map_err(|_| binary_api_error(None, "network", "Unable to reach the RAG API"))?;
     let status = response.status();
+    let status_code = status.as_u16();
     let content_type = response
         .headers()
         .get(CONTENT_TYPE)
         .and_then(|value| value.to_str().ok())
         .map(str::to_string);
-    let bytes = response
-        .bytes()
-        .await
-        .map_err(|_| "Unable to download the file".to_string())?;
+    let bytes = response.bytes().await.map_err(|_| {
+        binary_api_error(Some(status_code), "network", "Unable to download the file")
+    })?;
 
     if !status.is_success() {
-        return Err(binary_error_message(status.as_u16(), &bytes));
+        return Err(binary_api_error(
+            Some(status_code),
+            "http",
+            binary_error_message(status_code, &bytes),
+        ));
     }
 
-    match request.path.rsplit('/').next() {
-        Some("pdf") => validate_pdf_response(content_type.as_deref(), &bytes)?,
-        Some("markdown") => validate_markdown_response(content_type.as_deref(), &bytes)?,
-        Some("images") => validate_image_response(content_type.as_deref(), &bytes)?,
-        _ => return Err("Binary API endpoint is not allowed".to_string()),
-    }
+    let validation = match request.path.rsplit('/').next() {
+        Some("pdf") => validate_pdf_response(content_type.as_deref(), &bytes),
+        Some("markdown") => validate_markdown_response(content_type.as_deref(), &bytes),
+        Some("images") => validate_image_response(content_type.as_deref(), &bytes),
+        _ => {
+            return Err(binary_api_error(
+                None,
+                "request",
+                "Binary API endpoint is not allowed",
+            ));
+        }
+    };
+    validation
+        .map_err(|message| binary_api_error(Some(status_code), "invalid_response", message))?;
     Ok(tauri::ipc::Response::new(bytes.to_vec()))
+}
+
+#[tauri::command]
+fn open_logs_folder(app: tauri::AppHandle) -> Result<(), String> {
+    let log_dir = app
+        .path()
+        .app_log_dir()
+        .map_err(|_| "Unable to locate the application log folder".to_string())?;
+    std::fs::create_dir_all(&log_dir)
+        .map_err(|_| "Unable to create the application log folder".to_string())?;
+    app.opener()
+        .open_path(log_dir.to_string_lossy().as_ref(), None::<&str>)
+        .map_err(|_| "Unable to open the application log folder".to_string())
 }
 
 #[tauri::command]
@@ -599,6 +676,22 @@ async fn stop_document_watch(file_id: String, state: State<'_, AppState>) -> Res
 pub fn run() {
     tauri::Builder::default()
         .manage(AppState::default())
+        .plugin(
+            tauri_plugin_log::Builder::new()
+                .clear_targets()
+                .target(Target::new(TargetKind::LogDir {
+                    file_name: Some("rag-desktop-errors".to_string()),
+                }))
+                .max_file_size(1_000_000)
+                .rotation_strategy(RotationStrategy::KeepSome(3))
+                .level(tauri_plugin_log::log::LevelFilter::Error)
+                .filter(|metadata| {
+                    metadata
+                        .target()
+                        .starts_with(tauri_plugin_log::WEBVIEW_TARGET)
+                })
+                .build(),
+        )
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_opener::init())
@@ -616,6 +709,7 @@ pub fn run() {
             api_request,
             api_binary_request,
             upload_document,
+            open_logs_folder,
             watch_document,
             stop_document_watch
         ])
@@ -626,8 +720,8 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::{
-        api_validation_error, binary_error_message, endpoint_url, validate_image_response,
-        validate_markdown_response, validate_pdf_response,
+        api_validation_error, binary_api_error, binary_error_message, endpoint_url,
+        validate_image_response, validate_markdown_response, validate_pdf_response,
     };
 
     #[test]
@@ -762,6 +856,20 @@ mod tests {
     }
 
     #[test]
+    fn binary_command_errors_serialize_status_and_reason_for_frontend_logging() {
+        // 1. ARRANGE
+        let error = binary_api_error(Some(404), "http", "Document is unavailable");
+
+        // 2. ACT
+        let serialized = serde_json::to_value(error).expect("error should serialize");
+
+        // 3. ASSERT
+        assert_eq!(serialized["status"], 404);
+        assert_eq!(serialized["reason"], "http");
+        assert_eq!(serialized["message"], "Document is unavailable");
+    }
+
+    #[test]
     fn api_validation_statuses_are_mapped_without_sensitive_data() {
         // 1. ARRANGE
         let cases = [
@@ -782,8 +890,9 @@ mod tests {
             .collect::<Vec<_>>();
 
         // 3. ASSERT
-        for ((_, expected_code, expected_message), error) in cases.iter().zip(errors) {
+        for ((status, expected_code, expected_message), error) in cases.iter().zip(errors) {
             assert_eq!(&error.code, expected_code);
+            assert_eq!(error.status, Some(*status));
             assert!(error.message.contains(expected_message));
             assert!(!error.message.contains("X-API-Key"));
         }

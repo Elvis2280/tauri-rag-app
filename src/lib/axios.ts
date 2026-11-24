@@ -1,4 +1,10 @@
 import { Channel, invoke } from '@tauri-apps/api/core';
+import {
+  logFrontendFailure,
+  type FrontendFailureReason,
+  type FrontendFailureStage,
+  type HttpMethod,
+} from '@/lib/errorLogging';
 
 type NativeApiResponse<TBody = unknown> = { status: number; body: TBody };
 
@@ -13,6 +19,18 @@ export class ApiError extends Error {
     super(`API request failed with status ${response.status}`);
     this.name = 'ApiError';
     this.response = response;
+  }
+}
+
+export class BinaryApiError extends Error {
+  readonly status: number | null;
+  readonly reason: FrontendFailureReason;
+
+  constructor(message: string, status: number | null, reason: FrontendFailureReason) {
+    super(message);
+    this.name = 'BinaryApiError';
+    this.status = status;
+    this.reason = reason;
   }
 }
 
@@ -44,17 +62,73 @@ function throwForStatus(response: NativeApiResponse): void {
   }
 }
 
+function reportApiFailure(
+  stage: FrontendFailureStage,
+  method: HttpMethod,
+  path: string,
+  status: number | null,
+  reason: FrontendFailureReason,
+): void {
+  void logFrontendFailure({ stage, method, path, status, reason });
+}
+
+function isFailureReason(value: unknown): value is FrontendFailureReason {
+  return (
+    value === 'http' ||
+    value === 'network' ||
+    value === 'invalid_response' ||
+    value === 'render' ||
+    value === 'request'
+  );
+}
+
+function normalizeBinaryApiError(error: unknown): BinaryApiError {
+  if (error instanceof BinaryApiError) return error;
+
+  if (typeof error === 'object' && error !== null && hasMessage(error)) {
+    const candidateStatus = 'status' in error ? error.status : null;
+    const candidateReason = 'reason' in error ? error.reason : null;
+    const status =
+      typeof candidateStatus === 'number' &&
+      Number.isInteger(candidateStatus) &&
+      candidateStatus >= 100 &&
+      candidateStatus <= 599
+        ? candidateStatus
+        : null;
+    const reason = isFailureReason(candidateReason) ? candidateReason : 'request';
+    return new BinaryApiError(error.message, status, reason);
+  }
+
+  return new BinaryApiError(
+    normalizeNativeError(error, 'Unable to download the file').message,
+    null,
+    'network',
+  );
+}
+
 async function request<T>(
   method: 'GET' | 'POST',
   path: string,
   body?: unknown,
 ): Promise<{ data: T }> {
   const normalizedPath = path.replace(/^\/+/, '');
-  const response = await invoke<NativeApiResponse<T>>('api_request', {
-    request: { method, path: normalizedPath, body },
-  });
-  throwForStatus(response);
-  return { data: response.body };
+  try {
+    const response = await invoke<NativeApiResponse<T>>('api_request', {
+      request: { method, path: normalizedPath, body },
+    });
+    try {
+      throwForStatus(response);
+    } catch (error) {
+      reportApiFailure('request', method, normalizedPath, response.status, 'http');
+      throw error;
+    }
+    return { data: response.body };
+  } catch (error) {
+    if (!(error instanceof ApiError)) {
+      reportApiFailure('request', method, normalizedPath, null, 'network');
+    }
+    throw error;
+  }
 }
 
 async function requestBinary(path: string): Promise<{ data: Uint8Array }> {
@@ -65,7 +139,15 @@ async function requestBinary(path: string): Promise<{ data: Uint8Array }> {
     });
     return { data };
   } catch (error) {
-    throw normalizeNativeError(error, 'Unable to download the file');
+    const failure = normalizeBinaryApiError(error);
+    reportApiFailure(
+      'download',
+      'GET',
+      normalizedPath,
+      failure.status,
+      failure.reason,
+    );
+    throw failure;
   }
 }
 
@@ -88,18 +170,30 @@ export async function uploadFile<T>(
 
   const bytes = new Uint8Array(await file.arrayBuffer());
   const normalizedPath = path.replace(/^\/+/, '');
-  const response = await invoke<NativeApiResponse<T>>('upload_document', bytes, {
-    headers: {
-      'x-upload-metadata': encodeUploadMetadata({
-        workspace_id: workspaceId,
-        filename: file.name,
-        mime_type: file.type || 'application/octet-stream',
-        path: normalizedPath,
-      }),
-    },
-  });
-  throwForStatus(response);
-  return { data: response.body };
+  try {
+    const response = await invoke<NativeApiResponse<T>>('upload_document', bytes, {
+      headers: {
+        'x-upload-metadata': encodeUploadMetadata({
+          workspace_id: workspaceId,
+          filename: file.name,
+          mime_type: file.type || 'application/octet-stream',
+          path: normalizedPath,
+        }),
+      },
+    });
+    try {
+      throwForStatus(response);
+    } catch (error) {
+      reportApiFailure('request', 'POST', normalizedPath, response.status, 'http');
+      throw error;
+    }
+    return { data: response.body };
+  } catch (error) {
+    if (!(error instanceof ApiError)) {
+      reportApiFailure('request', 'POST', normalizedPath, null, 'network');
+    }
+    throw error;
+  }
 }
 
 export const apiRag: ApiClient = {
@@ -166,6 +260,26 @@ export async function validateSavedAccess(): Promise<void> {
   try {
     await invoke('validate_saved_access');
   } catch (error) {
+    const status =
+      typeof error === 'object' && error !== null && 'status' in error &&
+      typeof error.status === 'number' &&
+      Number.isInteger(error.status) &&
+      error.status >= 100 &&
+      error.status <= 599
+        ? error.status
+        : null;
+    const code =
+      typeof error === 'object' && error !== null && 'code' in error &&
+      typeof error.code === 'string'
+        ? error.code
+        : null;
+    reportApiFailure(
+      'request',
+      'GET',
+      'workspace/list',
+      status,
+      status !== null ? 'http' : code === 'connection' ? 'network' : 'request',
+    );
     throw normalizeNativeError(
       error,
       'The saved API access settings could not be validated.',

@@ -1,5 +1,11 @@
 import { cn } from '@/lib/utils';
-import { MessageCircleMore, FileUp, Folders, FileClock } from 'lucide-react';
+import {
+  MessageCircleMore,
+  FileUp,
+  Folders,
+  FileClock,
+  Settings,
+} from 'lucide-react';
 import { Button } from '../ui/button';
 import { CurrentPageType } from '@/types/GlobalTypes';
 import { useLocation, useNavigate, Outlet } from 'react-router';
@@ -7,6 +13,7 @@ import { Toaster } from '@/components/ui/sonner';
 import { useHistoryWebsocket } from '@/hooks/useHistoryWebsocket';
 import { useMemo } from 'react';
 import { TooltipProvider } from '../ui/tooltip';
+import { CONFIGURATION_LABELS } from '@/constants/configuration';
 
 type navItemType = {
   path: string;
@@ -31,12 +38,12 @@ const pathToPage: Record<string, CurrentPageType> = {
 
 type LayoutProps = {
   interactive?: boolean;
-  onManageApiAccess?: () => void;
+  onOpenConfiguration?: () => void;
 };
 
 export default function Layout({
   interactive = true,
-  onManageApiAccess = () => undefined,
+  onOpenConfiguration = () => undefined,
 }: LayoutProps) {
   useHistoryWebsocket(interactive);
   const navigate = useNavigate();
@@ -65,11 +72,12 @@ export default function Layout({
         {navList}
         <Button
           variant="ghost"
-          onClick={onManageApiAccess}
+          onClick={onOpenConfiguration}
           disabled={!interactive}
-          className="mt-auto flex w-full items-center px-2 py-1 text-center justify-center"
+          className="mt-auto flex w-full items-center justify-center gap-2 px-2 py-1 text-center"
         >
-          API access
+          <Settings size={18} aria-hidden="true" />
+          {CONFIGURATION_LABELS.title}
         </Button>
       </nav>
 

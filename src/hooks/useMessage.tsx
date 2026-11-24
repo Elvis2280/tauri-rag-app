@@ -48,7 +48,8 @@ export default function useMessage(): UseMessageResult {
     SendMessageMutationParams
   >({
     mutationFn: postMessage,
-    onSuccess: (response) => {
+    onSuccess: (response, { userMessageId }) => {
+      if (!useChatStore.getState().messages[userMessageId]) return;
       useChatStore.getState().addMessage(
         {
           role: CHAT_ROLE.ASSISTANT,
@@ -60,7 +61,8 @@ export default function useMessage(): UseMessageResult {
         CHAT_STATUS.COMPLETED,
       );
     },
-    onError: (error) => {
+    onError: (error, { userMessageId }) => {
+      if (!useChatStore.getState().messages[userMessageId]) return;
       const message = extractApiErrorMessage(error, SEND_MESSAGE_ERROR);
 
       toast.error(SEND_MESSAGE_ERROR, { description: message });
