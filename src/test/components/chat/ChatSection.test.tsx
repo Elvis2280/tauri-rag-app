@@ -37,12 +37,12 @@ describe("ChatSection", () => {
       response: "",
       english_markdown_id: buildChatMessage().id,
       japanese_markdown_id: buildChatMessage().id,
+      sources: [],
     });
     mockedRefetchWorkspaces.mockReset();
     mockedUseMessage.mockReturnValue({
       sendMessage: mockedSendMessage,
       isPending: false,
-      error: null,
     });
     mockedUseWorkspaceList.mockReturnValue({
       data: useGlobalContext.getState().workspaces,
@@ -117,7 +117,6 @@ describe("ChatSection", () => {
     mockedUseMessage.mockReturnValue({
       sendMessage: mockedSendMessage,
       isPending: true,
-      error: null,
     });
 
     // 2. ACT
@@ -138,7 +137,6 @@ describe("ChatSection", () => {
     mockedUseMessage.mockReturnValue({
       sendMessage: mockedSendMessage,
       isPending: true,
-      error: null,
     });
 
     // 2. ACT
@@ -147,7 +145,7 @@ describe("ChatSection", () => {
     // 3. ASSERT
     expect(
       screen.getByRole("status", {
-        name: "Assistant is preparing a response",
+        name: "Waiting for the assistant",
       }),
     ).toBeInTheDocument();
   });

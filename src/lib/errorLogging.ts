@@ -8,7 +8,7 @@ export type FrontendFailureReason =
   | 'invalid_response'
   | 'render'
   | 'request';
-export type HttpMethod = 'GET' | 'POST';
+export type HttpMethod = 'GET' | 'POST' | 'PATCH';
 
 export type FrontendFailure = {
   stage: FrontendFailureStage;
@@ -30,6 +30,10 @@ function toLogPath(path: string): string {
 
   if (parts.length === 3 && parts[0] === 'workspace' && parts[2] === 'disable') {
     return '/workspace/:id/disable';
+  }
+
+  if (parts.length === 2 && parts[0] === 'documents') {
+    return '/documents/:id';
   }
 
   if (

@@ -7,6 +7,7 @@ import {
 } from '@/lib/errorLogging';
 
 type NativeApiResponse<TBody = unknown> = { status: number; body: TBody };
+type NativeChatJobResponse<TBody> = { status: number; body: TBody; retryAfter: string | null };
 
 type NativeCommandError = { message: string };
 
@@ -38,6 +39,13 @@ type ApiClient = {
   get<T>(path: string): Promise<{ data: T }>;
   getBinary(path: string): Promise<{ data: Uint8Array }>;
   post<T>(path: string, body?: unknown): Promise<{ data: T }>;
+  chatJob<T>(
+    method: 'GET' | 'POST',
+    path: string,
+    idempotencyKey: string,
+    body?: unknown,
+  ): Promise<{ status: number; data: T; retryAfter: string | null }>;
+  patch<T>(path: string, body: FormData): Promise<{ data: T }>;
 };
 
 function hasMessage(value: object): value is NativeCommandError {
@@ -107,7 +115,7 @@ function normalizeBinaryApiError(error: unknown): BinaryApiError {
 }
 
 async function request<T>(
-  method: 'GET' | 'POST',
+  method: 'GET' | 'POST' | 'PATCH',
   path: string,
   body?: unknown,
 ): Promise<{ data: T }> {
@@ -151,6 +159,39 @@ async function requestBinary(path: string): Promise<{ data: Uint8Array }> {
   }
 }
 
+export async function requestChatJob<T>(
+  method: 'GET' | 'POST',
+  path: string,
+  idempotencyKey: string,
+  body?: unknown,
+): Promise<{ status: number; data: T; retryAfter: string | null }> {
+  const normalizedPath = path.replace(/^\/+/, '');
+  const isSubmit =
+    method === 'POST' && normalizedPath === 'chat/jobs' && body !== undefined;
+  const isPoll =
+    method === 'GET' &&
+    /^chat\/jobs\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+      normalizedPath,
+    ) &&
+    body === undefined;
+  if (!isSubmit && !isPoll) throw new Error('Chat job request is invalid');
+
+  try {
+    const response = await invoke<NativeChatJobResponse<T>>('chat_job_request', {
+      request: { method, path: normalizedPath, body },
+      idempotencyKey,
+    });
+    return {
+      status: response.status,
+      data: response.body,
+      retryAfter: response.retryAfter,
+    };
+  } catch (error) {
+    reportApiFailure('request', method, normalizedPath, null, 'network');
+    throw normalizeNativeError(error, 'Unable to reach the RAG API');
+  }
+}
+
 function encodeUploadMetadata(value: unknown): string {
   const bytes = new TextEncoder().encode(JSON.stringify(value));
   let binary = '';
@@ -161,10 +202,14 @@ function encodeUploadMetadata(value: unknown): string {
 export async function uploadFile<T>(
   path: string,
   formData: FormData,
+  documentId?: string,
 ): Promise<{ data: T }> {
-  const workspaceId = formData.get('workspace_id');
   const file = formData.get('file');
-  if (typeof workspaceId !== 'string' || !(file instanceof File)) {
+  if (!(file instanceof File)) {
+    throw new Error('Upload form data is invalid');
+  }
+  const workspaceId = formData.get('workspace_id');
+  if (documentId === undefined && typeof workspaceId !== 'string') {
     throw new Error('Upload form data is invalid');
   }
 
@@ -174,7 +219,7 @@ export async function uploadFile<T>(
     const response = await invoke<NativeApiResponse<T>>('upload_document', bytes, {
       headers: {
         'x-upload-metadata': encodeUploadMetadata({
-          workspace_id: workspaceId,
+          ...(documentId ? { document_id: documentId } : { workspace_id: workspaceId }),
           filename: file.name,
           mime_type: file.type || 'application/octet-stream',
           path: normalizedPath,
@@ -184,13 +229,13 @@ export async function uploadFile<T>(
     try {
       throwForStatus(response);
     } catch (error) {
-      reportApiFailure('request', 'POST', normalizedPath, response.status, 'http');
+      reportApiFailure('request', documentId ? 'PATCH' : 'POST', normalizedPath, response.status, 'http');
       throw error;
     }
     return { data: response.body };
   } catch (error) {
     if (!(error instanceof ApiError)) {
-      reportApiFailure('request', 'POST', normalizedPath, null, 'network');
+      reportApiFailure('request', documentId ? 'PATCH' : 'POST', normalizedPath, null, 'network');
     }
     throw error;
   }
@@ -202,6 +247,14 @@ export const apiRag: ApiClient = {
   post: <T>(path: string, body?: unknown) => {
     if (body instanceof FormData) return uploadFile<T>(path, body);
     return request<T>('POST', path, body);
+  },
+  chatJob: requestChatJob,
+  patch: <T>(path: string, body: FormData) => {
+    const match = path.match(/^\/?documents\/([0-9a-f-]{36})$/i);
+    if (!match || !body.has('file')) {
+      throw new Error('Document replacement request is invalid');
+    }
+    return uploadFile<T>(path, body, match[1]);
   },
 };
 

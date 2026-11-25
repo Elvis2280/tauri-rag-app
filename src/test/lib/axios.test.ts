@@ -7,9 +7,6 @@ const { invokeMock, logErrorMock } = vi.hoisted(() => ({
 }));
 
 vi.mock('@tauri-apps/api/core', () => ({
-  Channel: class {
-    onmessage: ((event: unknown) => void) | null = null;
-  },
   invoke: invokeMock,
 }));
 
@@ -45,6 +42,46 @@ describe('native API client', () => {
     expect(invokeMock).toHaveBeenCalledWith('api_request', {
       request: { method: 'GET', path: 'workspace/list', body: undefined },
     });
+  });
+
+  it('sends chat job requests through the native command with the idempotency key', async () => {
+    // 1. ARRANGE
+    const key = faker.string.uuid();
+    const body = {
+      workspace_id: faker.string.uuid(),
+      message: faker.lorem.sentence(),
+    };
+    const job = { id: faker.string.uuid(), status: 'queued' };
+    invokeMock.mockResolvedValueOnce({ status: 202, body: job, retryAfter: null });
+
+    // 2. ACT
+    const response = await apiRag.chatJob<typeof job>('POST', '/chat/jobs', key, body);
+
+    // 3. ASSERT
+    expect(response).toEqual({ status: 202, data: job, retryAfter: null });
+    expect(invokeMock).toHaveBeenCalledWith('chat_job_request', {
+      request: { method: 'POST', path: 'chat/jobs', body },
+      idempotencyKey: key,
+    });
+  });
+
+  it('returns a full-queue response and its Retry-After value for caller retries', async () => {
+    // 1. ARRANGE
+    const key = faker.string.uuid();
+    const retryAfter = '5';
+    const queueResponse = { detail: faker.lorem.sentence() };
+    invokeMock.mockResolvedValueOnce({ status: 503, body: queueResponse, retryAfter });
+
+    // 2. ACT
+    const response = await apiRag.chatJob<typeof queueResponse>(
+      'POST',
+      '/chat/jobs',
+      key,
+      { workspace_id: faker.string.uuid(), message: faker.lorem.sentence() },
+    );
+
+    // 3. ASSERT
+    expect(response).toMatchObject({ status: 503, data: queueResponse, retryAfter });
   });
 
   it('maps native non-success responses to an API error with response data', async () => {

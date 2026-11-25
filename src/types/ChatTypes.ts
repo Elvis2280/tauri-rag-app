@@ -20,4 +20,14 @@ export type ChatMessage = {
   status: ChatStatus;
   englishMarkdownId?: string;
   japaneseMarkdownId?: string;
+  sources?: Array<{
+    documentId: string;
+    pageNumber: number;
+    englishMarkdownId: string;
+    japaneseMarkdownId: string;
+  }>;
+  workspaceId?: string;
+  idempotencyKey?: string;
+  jobId?: string;
+  jobStatus?: "queued" | "running";
 };

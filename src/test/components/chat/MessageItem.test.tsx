@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { faker } from "@faker-js/faker";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import MessageItem from "@/components/chat/MessageItem";
@@ -107,6 +108,38 @@ describe("MessageItem", () => {
       message.japaneseMarkdownId,
     );
     expect(await screen.findByRole("dialog")).toHaveTextContent("日本語の原文");
+  });
+
+  it("shows a preview action for every cited source page", async () => {
+    // 1. ARRANGE
+    const user = userEvent.setup();
+    const englishMarkdownId = buildChatMessage().id;
+    const japaneseMarkdownId = buildChatMessage().id;
+    const pageNumber = faker.number.int({ min: 1, max: 40 });
+    const message = buildChatMessage({
+      role: CHAT_ROLE.ASSISTANT,
+      sources: [{
+        documentId: buildChatMessage().id,
+        pageNumber,
+        englishMarkdownId,
+        japaneseMarkdownId,
+      }],
+    });
+    useChatStore.setState({
+      messages: { [message.id]: message },
+      messageOrder: [message.id],
+    });
+    render(<MessageItem id={message.id} />);
+
+    // 2. ACT
+    const englishButton = screen.getByRole("button", { name: `Preview English source page ${pageNumber}` });
+    const japaneseButton = screen.getByRole("button", { name: `日本語の原文ページ ${pageNumber} をプレビュー` });
+    expect(englishButton).toHaveTextContent(`p. ${pageNumber}`);
+    expect(japaneseButton).toHaveTextContent(`p. ${pageNumber}`);
+    await user.click(englishButton);
+
+    // 3. ASSERT
+    expect(mockedLoadMarkdown).toHaveBeenCalledWith(englishMarkdownId);
   });
 
   it("shows a loading state and a clear error when the source page cannot load", async () => {

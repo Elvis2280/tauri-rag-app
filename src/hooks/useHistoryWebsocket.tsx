@@ -5,12 +5,17 @@ import { useHistory } from "@/context/HistoryContext";
 import { FILE_STATUS, type WebSocketProgressMessage } from "@/types/FileTypes";
 
 const WS_BASE = "native://document-status";
-
 const clients = new Map<string, WebSocketClient>();
-const intentionallyClosed = new Set<string>();
+
+export function restartDocumentWatch(documentId: string): void {
+  const client = clients.get(documentId);
+  if (!client) return;
+  clients.delete(documentId);
+  client.disconnect();
+}
 
 export function useHistoryWebsocket(enabled = true): void {
-  const entries = useHistory((s) => s.entries);
+  const entries = useHistory((state) => state.entries);
 
   useEffect(() => {
     if (!enabled) return;
@@ -26,8 +31,10 @@ export function useHistoryWebsocket(enabled = true): void {
         `${WS_BASE}/documents/${entry.file_id}/ws`,
         { reconnect: false },
       );
+      clients.set(entry.file_id, client);
 
       client.subscribe((raw) => {
+        if (clients.get(entry.file_id) !== client) return;
         const msg = raw as Partial<WebSocketProgressMessage>;
         if (!msg || typeof msg !== "object" || !msg.status) return;
         if (msg.file_id && msg.file_id !== entry.file_id) {
@@ -41,12 +48,10 @@ export function useHistoryWebsocket(enabled = true): void {
 
         const current = useHistory
           .getState()
-          .entries.find((e) => e.file_id === entry.file_id);
-
+          .entries.find((item) => item.file_id === entry.file_id);
         useHistory.getState().updateEntry(entry.file_id, {
           status: msg.status,
-          originalFilename:
-            msg.original_filename ?? current?.originalFilename ?? null,
+          originalFilename: msg.original_filename ?? current?.originalFilename ?? null,
           workspaceName: msg.workspace_name ?? current?.workspaceName ?? null,
           message: msg.message ?? null,
           timestamp: msg.timestamp ?? current?.timestamp ?? new Date().toISOString(),
@@ -54,8 +59,7 @@ export function useHistoryWebsocket(enabled = true): void {
           stage: msg.stage ?? null,
           pageNumber: msg.page_number ?? null,
           totalPages: msg.total_pages ?? null,
-          stepTotal:
-            msg.step_total ?? msg.stepTotal ?? current?.stepTotal ?? null,
+          stepTotal: msg.step_total ?? msg.stepTotal ?? current?.stepTotal ?? null,
           error: msg.error ?? null,
         });
 
@@ -63,61 +67,49 @@ export function useHistoryWebsocket(enabled = true): void {
           msg.status === FILE_STATUS.COMPLETED ||
           msg.status === FILE_STATUS.FAILED
         ) {
-          intentionallyClosed.add(entry.file_id);
-          client.disconnect();
           clients.delete(entry.file_id);
+          client.disconnect();
         }
       });
 
       client.onStateChange((state) => {
-        if (intentionallyClosed.has(entry.file_id)) return;
-        if (state === "error" || state === "closed") {
-          intentionallyClosed.add(entry.file_id);
-          const current = useHistory
-            .getState()
-            .entries.find((e) => e.file_id === entry.file_id);
-          if (
-            current &&
-            (current.status === FILE_STATUS.COMPLETED ||
-              current.status === FILE_STATUS.FAILED)
-          ) {
-            client.disconnect();
-            clients.delete(entry.file_id);
-            return;
-          }
-          console.error(
-            "useHistoryWebsocket: connection error",
-            {
-              file_id: entry.file_id,
-              state,
-              url: `${WS_BASE}/documents/${entry.file_id}/ws`,
-            },
-          );
-          toast.error("Unable to get file's status");
-          useHistory
-            .getState()
-            .markFailed(
-              entry.file_id,
-              "WebSocket disconnected before completion",
-            );
-          client.disconnect();
+        if (clients.get(entry.file_id) !== client) return;
+        if (state !== "error" && state !== "closed") return;
+
+        const current = useHistory
+          .getState()
+          .entries.find((item) => item.file_id === entry.file_id);
+        if (
+          current &&
+          (current.status === FILE_STATUS.COMPLETED ||
+            current.status === FILE_STATUS.FAILED)
+        ) {
           clients.delete(entry.file_id);
+          client.disconnect();
+          return;
         }
+
+        clients.delete(entry.file_id);
+        console.error("useHistoryWebsocket: connection error", {
+          file_id: entry.file_id,
+          state,
+          url: `${WS_BASE}/documents/${entry.file_id}/ws`,
+        });
+        toast.error("Unable to get file's status");
+        useHistory
+          .getState()
+          .markFailed(entry.file_id, "WebSocket disconnected before completion");
+        client.disconnect();
       });
 
-      clients.set(entry.file_id, client);
       client.connect();
     }
   }, [enabled, entries]);
 
-  useEffect(() => {
-    return () => {
-      for (const [id, client] of clients) {
-        intentionallyClosed.add(id);
-        client.disconnect();
-      }
-      clients.clear();
-      intentionallyClosed.clear();
-    };
+  useEffect(() => () => {
+    for (const [id, client] of clients) {
+      clients.delete(id);
+      client.disconnect();
+    }
   }, []);
 }

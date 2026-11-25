@@ -3,6 +3,7 @@ import { HashRouter, Route, Routes } from "react-router";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import ChatJobManager from "@/components/chat/ChatJobManager";
 import ConfigurationModal from "@/components/configuration/ConfigurationModal";
 import ChatSection from "@/components/chat/ChatSection";
 import Layout from "@/components/common/Layout";
@@ -10,6 +11,7 @@ import HistorySection from "@/components/history/HistorySection";
 import { Toaster } from "@/components/ui/sonner";
 import UploadSection from "@/components/upload/UploadSection";
 import WorkspacePage from "@/components/workspace/WorkspacePage";
+import { useChatStore } from "@/context/chatStore";
 import { useApiAccess } from "@/hooks/useApiAccess";
 import { useWorkspaceList } from "@/hooks/useWorkspace";
 import { resetEnvironmentData } from "@/lib/resetEnvironmentData";
@@ -97,12 +99,20 @@ function AuthenticatedApp({ access, onResetEnvironment }: AuthenticatedAppProps)
   const [configurationOpen, setConfigurationOpen] = useState(false);
   useWorkspaceList();
 
+  const handleConfigurationOpenChange = (open: boolean) => {
+    useChatStore.getState().setChatTrackingPaused(open);
+    setConfigurationOpen(open);
+  };
+
   return (
     <HashRouter>
       <Toaster />
+      <ChatJobManager />
       <Routes>
         <Route
-          element={<Layout onOpenConfiguration={() => setConfigurationOpen(true)} />}
+          element={
+            <Layout onOpenConfiguration={() => handleConfigurationOpenChange(true)} />
+          }
         >
           <Route path="/" element={<UploadSection />} />
           <Route path="/upload" element={<UploadSection />} />
@@ -115,7 +125,7 @@ function AuthenticatedApp({ access, onResetEnvironment }: AuthenticatedAppProps)
         open={configurationOpen}
         serverHost={access.serverHost}
         statusError={access.error}
-        onOpenChange={setConfigurationOpen}
+        onOpenChange={handleConfigurationOpenChange}
         onCancelRequired={closeCurrentWindow}
         onSetup={access.setup}
         onUpdateApiKey={async (apiKey) => {
@@ -125,7 +135,7 @@ function AuthenticatedApp({ access, onResetEnvironment }: AuthenticatedAppProps)
           await access.saveServerHost(serverHost);
         }}
         onValidateAndClose={async () => {
-          setConfigurationOpen(false);
+          handleConfigurationOpenChange(false);
           try {
             await onResetEnvironment();
             const validated = await access.checkSavedAccess();

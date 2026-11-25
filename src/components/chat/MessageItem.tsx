@@ -11,6 +11,11 @@ export default function MessageItem({ id }: { id: string }) {
   const isUser = message.role === CHAT_ROLE.USER;
   const englishSourceId = !isUser ? message.englishMarkdownId : undefined;
   const japaneseSourceId = !isUser ? message.japaneseMarkdownId : undefined;
+  const hasSourcePreview = Boolean(
+    englishSourceId ||
+      japaneseSourceId ||
+      message.sources?.some((source) => source.englishMarkdownId || source.japaneseMarkdownId),
+  );
 
   return (
     <div
@@ -28,10 +33,11 @@ export default function MessageItem({ id }: { id: string }) {
         )}
       >
         <p className="whitespace-pre-wrap break-words">{message.content}</p>
-        {(englishSourceId || japaneseSourceId) && (
+        {hasSourcePreview && (
           <MessageSourcePreview
             englishSourceId={englishSourceId}
             japaneseSourceId={japaneseSourceId}
+            sources={message.sources}
           />
         )}
       </div>

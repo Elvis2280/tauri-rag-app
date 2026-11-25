@@ -7,6 +7,7 @@ export const WORKSPACE_ENDPOINTS = {
 
 export const DOCUMENT_ENDPOINTS = {
   upload: "/documents/upload",
+  replace: (documentId: string) => `/documents/${documentId}`,
   pdf: (documentId: string) => `/documents/${documentId}/pdf`,
   retry: (documentId: string) => `/documents/${documentId}/retry`,
   history: (documentId: string, cursor?: string) => `/documents/${documentId}/history?limit=50${cursor ? `&cursor=${cursor}` : ""}`,
@@ -15,5 +16,6 @@ export const DOCUMENT_ENDPOINTS = {
 } as const;
 
 export const CHAT_ENDPOINTS = {
-  send: "/chat",
+  submit: "/chat/jobs",
+  job: (jobId: string) => `/chat/jobs/${jobId}`,
 } as const;

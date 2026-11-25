@@ -11,13 +11,15 @@ import type { FileUploadType } from "@/types/FileTypes";
 
 type UploadModalFileItemProps = {
   file: FileUploadType;
+  errorMessage?: string;
+  disabled?: boolean;
 };
 
 function formatBytesToMB(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
 }
 
-export default function UploadModalFileItem({ file }: UploadModalFileItemProps) {
+export default function UploadModalFileItem({ file, errorMessage, disabled = false }: UploadModalFileItemProps) {
   const removeFile = useFileContext((state) => state.removeFile);
 
   return (
@@ -33,11 +35,14 @@ export default function UploadModalFileItem({ file }: UploadModalFileItemProps) 
           variant="ghost"
           size="icon-sm"
           aria-label={`Remove ${file.file.name}`}
+          type="button"
+          disabled={disabled}
           onClick={() => removeFile(file.id)}
         >
           <X />
         </Button>
       </ItemActions>
+      {errorMessage && <p role="alert" className="basis-full text-xs text-destructive">{errorMessage}</p>}
     </Item>
   );
 }

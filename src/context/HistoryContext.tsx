@@ -1,13 +1,14 @@
 import { create } from "zustand";
 import { FILE_STATUS } from "@/types/FileTypes";
 import type { HistoryEntry } from "@/types/FileTypes";
+import type { UploadFileSuccessResponse } from "@/types/UploadFileType";
 
 type State = {
   entries: HistoryEntry[];
 };
 
 type Actions = {
-  registerFileId: (id: string) => void;
+  startReplacement: (response: UploadFileSuccessResponse, workspaceName: string) => void;
   updateEntry: (id: string, patch: Partial<HistoryEntry>) => void;
   markFailed: (id: string, reason: string) => void;
   markRetryQueued: (id: string) => void;
@@ -17,30 +18,30 @@ type Actions = {
 export const useHistory = create<State & Actions>()(
     (set) => ({
       entries: [],
-      registerFileId: (id) =>
-        set((s) =>
-          s.entries.some((e) => e.file_id === id)
-            ? s
-            : {
-                entries: [
-                  ...s.entries,
-                  {
-                    file_id: id,
-                    originalFilename: null,
-                    workspaceName: null,
-                    message: null,
-                    status: FILE_STATUS.FILE_UPLOADED,
-                    timestamp: new Date().toISOString(),
-                    step: null,
-                    stage: null,
-                    pageNumber: null,
-                    totalPages: null,
-                    stepTotal: null,
-                    error: null,
-                  },
-                ],
-              },
-        ),
+      startReplacement: (response, workspaceName) =>
+        set((s) => {
+          const entry: HistoryEntry = {
+            file_id: response.document_id,
+            originalFilename: response.original_filename,
+            workspaceName,
+            message: response.message,
+            status: FILE_STATUS.FILE_UPLOADED,
+            timestamp: new Date().toISOString(),
+            step: null,
+            stage: null,
+            pageNumber: null,
+            totalPages: response.page_count || null,
+            stepTotal: null,
+            error: null,
+          };
+          const existingIndex = s.entries.findIndex(
+            (item) => item.file_id === response.document_id,
+          );
+          if (existingIndex === -1) return { entries: [...s.entries, entry] };
+          const entries = s.entries.slice();
+          entries[existingIndex] = entry;
+          return { entries };
+        }),
       updateEntry: (id, patch) =>
         set((s) => {
           const idx = s.entries.findIndex((e) => e.file_id === id);

@@ -1,129 +1,111 @@
-import { describe, expect, it, vi } from "vitest";
-import { useState } from "react";
-import { render, screen } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { faker } from "@faker-js/faker";
+import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import UploadModal from "@/components/upload/UploadModal";
+import { useFileContext } from "@/context/FileContext";
+import { useGlobalContext } from "@/context/GlobalContext";
+import useFileUpload from "@/hooks/useFileUpload";
+import { useWorkspaceList, useWorkspaceTree } from "@/hooks/useWorkspace";
+import { buildWorkspace, buildWorkspaceFolderNode, buildWorkspaceListItem } from "@/test/factories/workspace.factory";
 import { FILE_STATUS } from "@/types/FileTypes";
 
+vi.mock("@/hooks/useFileUpload", () => ({ default: vi.fn() }));
+vi.mock("@/hooks/useWorkspace", () => ({
+  useWorkspaceList: vi.fn(),
+  useWorkspaceTree: vi.fn(),
+}));
+vi.mock("@/components/upload/UploadWorkspaceSelect", () => ({
+  default: ({ workspaces, value, onValueChange }: {
+    workspaces: Array<{ id: string; name: string }>;
+    value: string;
+    onValueChange: (id: string) => void;
+  }) => (
+    <select aria-label="Workspace" value={value} onChange={(event) => onValueChange(event.target.value)}>
+      <option value="">Select a workspace</option>
+      {workspaces.map((workspace) => <option key={workspace.id} value={workspace.id}>{workspace.name}</option>)}
+    </select>
+  ),
+}));
+
+const mockUploadFiles = vi.fn<ReturnType<typeof useFileUpload>["uploadFiles"]>();
+const mockedUseFileUpload = vi.mocked(useFileUpload);
+const mockedUseWorkspaceList = vi.mocked(useWorkspaceList);
+const mockedUseWorkspaceTree = vi.mocked(useWorkspaceTree);
+
 describe("UploadModal", () => {
-  it("submits through the form when Enter is pressed", async () => {
-    // 1. ARRANGE
-    const user = userEvent.setup();
-    const onUpload = vi.fn();
-    const workspaceId = faker.string.uuid();
-
-    // 2. ACT
-    render(
-      <UploadModal
-        isOpen
-        onClose={vi.fn()}
-        onUpload={onUpload}
-        files={[]}
-        workspaceId={workspaceId}
-        onWorkspaceChange={vi.fn()}
-        onWorkspaceBlur={vi.fn()}
-        canUpload
-        workspaces={[]}
-        duplicateFileNames={[]}
-        duplicateWorkspaceName=""
-        onUploadAnyway={vi.fn()}
-        onCancelDuplicateUpload={vi.fn()}
-      />,
-    );
-    screen.getByRole("button", { name: "Upload" }).focus();
-    await user.keyboard("{Enter}");
-
-    // 3. ASSERT
-    expect(onUpload).toHaveBeenCalledTimes(1);
+  beforeEach(() => {
+    const workspace = buildWorkspaceListItem();
+    useGlobalContext.setState({ workspaces: [workspace] });
+    useFileContext.setState({ files: [] });
+    mockUploadFiles.mockReset();
+    mockUploadFiles.mockResolvedValue([]);
+    mockedUseFileUpload.mockReturnValue({ uploadFiles: mockUploadFiles, loading: false });
+    mockedUseWorkspaceList.mockReturnValue({ data: [workspace], loading: false, error: null, refetch: vi.fn() });
+    mockedUseWorkspaceTree.mockReturnValue({ data: [], loading: false, error: null, refetch: vi.fn() });
   });
 
-  it("keeps the upload dialog open after accepting a duplicate", async () => {
+  it("shows child components within the modal and submits a regular upload", async () => {
     // 1. ARRANGE
     const user = userEvent.setup();
-    const onUpload = vi.fn();
-    const onClose = vi.fn();
-    const workspaceId = faker.string.uuid();
-    const workspaceName = faker.company.name();
-    const fileName = `${faker.string.alpha({ length: 10, casing: "lower" })}.pdf`;
-    const file = new File([faker.lorem.word()], fileName, {
-      type: "application/pdf",
-    });
-
-    function DuplicateUploadHarness() {
-      const [duplicateFileNames, setDuplicateFileNames] = useState([fileName]);
-
-      return (
-        <UploadModal
-          isOpen
-          onClose={onClose}
-          onUpload={onUpload}
-          files={[
-            {
-              id: faker.string.uuid(),
-              file,
-              status: FILE_STATUS.FILE_UPLOADED,
-            },
-          ]}
-          workspaceId={workspaceId}
-          onWorkspaceChange={vi.fn()}
-          onWorkspaceBlur={vi.fn()}
-          canUpload={duplicateFileNames.length === 0}
-          workspaces={[{ id: workspaceId, name: workspaceName }]}
-          duplicateFileNames={duplicateFileNames}
-          duplicateWorkspaceName={workspaceName}
-          onUploadAnyway={() => setDuplicateFileNames([])}
-          onCancelDuplicateUpload={onClose}
-        />
-      );
-    }
-    render(<DuplicateUploadHarness />);
+    const workspace = useGlobalContext.getState().workspaces[0];
+    const file = new File([faker.lorem.word()], faker.system.commonFileName("pdf"), { type: "application/pdf" });
+    const fileId = faker.string.uuid();
+    useFileContext.setState({ files: [{ id: fileId, file, status: FILE_STATUS.FILE_UPLOADED }] });
+    mockUploadFiles.mockResolvedValue([{ fileId, response: {
+      document_id: faker.string.uuid(), task_id: faker.string.uuid(), workspace_id: workspace.id,
+      original_filename: file.name, mime_type: file.type, stored_filename: faker.system.fileName(),
+      page_count: faker.number.int({ min: 1, max: 100 }), status: FILE_STATUS.FILE_UPLOADED, message: faker.lorem.sentence(),
+    } }]);
 
     // 2. ACT
+    render(<UploadModal open onClose={vi.fn()} />);
+    await user.selectOptions(screen.getByRole("combobox", { name: "Workspace" }), workspace.id);
+    await user.click(screen.getByRole("button", { name: "Upload" }));
+
+    // 3. ASSERT
+    await waitFor(() => expect(mockUploadFiles).toHaveBeenCalledWith({
+      files: [{ id: fileId, file, status: FILE_STATUS.FILE_UPLOADED }],
+      workspaceId: workspace.id,
+      workspaceName: workspace.name,
+      replacements: {},
+    }));
+  });
+
+  it("replaces the selected existing document when upload anyway is confirmed", async () => {
+    // 1. ARRANGE
+    const user = userEvent.setup();
+    const workspace = buildWorkspaceListItem();
+    const documentId = faker.string.uuid();
+    const uploadId = faker.string.uuid();
+    const fileName = faker.system.commonFileName("pdf");
+    const file = new File([faker.lorem.word()], fileName, { type: "application/pdf" });
+    const selectedFile = { id: uploadId, file, status: FILE_STATUS.FILE_UPLOADED };
+    const response = {
+      document_id: documentId, task_id: faker.string.uuid(), workspace_id: workspace.id,
+      original_filename: file.name, mime_type: file.type, stored_filename: faker.system.fileName(),
+      page_count: faker.number.int({ min: 1, max: 100 }), status: FILE_STATUS.FILE_UPLOADED, message: faker.lorem.sentence(),
+    };
+    useGlobalContext.setState({ workspaces: [workspace] });
+    useFileContext.setState({ files: [selectedFile] });
+    mockedUseWorkspaceTree.mockReturnValue({
+      data: [buildWorkspace({ id: workspace.id, name: workspace.name, children: [
+        buildWorkspaceFolderNode({ children: [{ type: "file", id: documentId, name: fileName, role: "original" }] }),
+      ] })], loading: false, error: null, refetch: vi.fn(),
+    });
+    mockUploadFiles.mockResolvedValue([{ fileId: uploadId, response }]);
+
+    // 2. ACT
+    render(<UploadModal open onClose={vi.fn()} />);
+    await user.selectOptions(screen.getByRole("combobox", { name: "Workspace" }), workspace.id);
     await user.click(screen.getByRole("button", { name: "Upload anyway" }));
 
     // 3. ASSERT
-    expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Upload" })).toBeEnabled();
-    expect(screen.getByRole("combobox")).toHaveTextContent(workspaceName);
-    expect(screen.getByText(fileName)).toBeInTheDocument();
-    expect(onClose).not.toHaveBeenCalled();
-
-    // 4. ACT
-    await user.click(screen.getByRole("button", { name: "Upload" }));
-
-    // 5. ASSERT
-    expect(onUpload).toHaveBeenCalledTimes(1);
-  });
-
-  it("delegates duplicate cancellation without submitting", async () => {
-    // 1. ARRANGE
-    const user = userEvent.setup();
-    const onCancelDuplicateUpload = vi.fn();
-    const fileName = `${faker.string.alpha({ length: 10, casing: "lower" })}.pdf`;
-
-    render(
-      <UploadModal
-        isOpen
-        onClose={vi.fn()}
-        onUpload={vi.fn()}
-        files={[]}
-        workspaceId={faker.string.uuid()}
-        onWorkspaceChange={vi.fn()}
-        onWorkspaceBlur={vi.fn()}
-        canUpload={false}
-        workspaces={[]}
-        duplicateFileNames={[fileName]}
-        duplicateWorkspaceName={faker.company.name()}
-        onUploadAnyway={vi.fn()}
-        onCancelDuplicateUpload={onCancelDuplicateUpload}
-      />,
-    );
-
-    // 2. ACT
-    await user.click(screen.getByRole("button", { name: "Cancel" }));
-
-    // 3. ASSERT
-    expect(onCancelDuplicateUpload).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(mockUploadFiles).toHaveBeenCalledWith({
+      files: [selectedFile],
+      workspaceId: workspace.id,
+      workspaceName: workspace.name,
+      replacements: { [uploadId]: documentId },
+    }));
   });
 });

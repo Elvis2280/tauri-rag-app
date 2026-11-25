@@ -198,9 +198,18 @@ pub struct ProgressEvent {
     pub error: Option<String>,
 }
 
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ChatJobApiResponse {
+    pub status: u16,
+    pub body: Value,
+    pub retry_after: Option<String>,
+}
+
 #[derive(Debug, Deserialize)]
 pub struct UploadMetadata {
-    workspace_id: String,
+    workspace_id: Option<String>,
+    document_id: Option<String>,
     filename: String,
     mime_type: String,
 }
@@ -217,7 +226,14 @@ fn endpoint_url(path: &str, api_base_url: &str) -> Result<reqwest::Url, String> 
     }
 
     let allowed = match route {
-        "workspace/list" | "workspace/tree" | "workspace" | "documents/upload" | "chat" => true,
+        "workspace/list" | "workspace/tree" | "workspace" | "documents/upload" | "chat" => {
+            query.is_empty()
+        }
+        "chat/jobs" => query.is_empty(),
+        value if value.starts_with("chat/jobs/") => {
+            let parts: Vec<&str> = value.split('/').collect();
+            query.is_empty() && parts.len() == 3 && uuid::Uuid::parse_str(parts[2]).is_ok()
+        }
         value if value.starts_with("documents/") && value.ends_with("/retry") => {
             let parts: Vec<&str> = value.split('/').collect();
             parts.len() == 3 && parts[2] == "retry" && uuid::Uuid::parse_str(parts[1]).is_ok()
@@ -228,10 +244,13 @@ fn endpoint_url(path: &str, api_base_url: &str) -> Result<reqwest::Url, String> 
         }
         value if value.starts_with("documents/") => {
             let parts: Vec<&str> = value.split('/').collect();
-            if parts.len() == 3 && parts[2] == "history" {
+            if parts.len() == 2 {
+                query.is_empty() && uuid::Uuid::parse_str(parts[1]).is_ok()
+            } else if parts.len() == 3 && parts[2] == "history" {
                 uuid::Uuid::parse_str(parts[1]).is_ok() && valid_history_query(query)
             } else {
-                query.is_empty() && parts.len() == 3
+                query.is_empty()
+                    && parts.len() == 3
                     && matches!(parts[2], "pdf" | "markdown" | "images")
                     && uuid::Uuid::parse_str(parts[1]).is_ok()
             }
@@ -480,11 +499,68 @@ async fn api_request(
                 None => builder.send().await,
             }
         }
+        "PATCH" => {
+            let builder = client.patch(url).header("X-API-Key", key);
+            match request.body {
+                Some(body) => builder.json(&body).send().await,
+                None => builder.send().await,
+            }
+        }
         _ => return Err("Unsupported API request".to_string()),
     }
     .map_err(|_| "Unable to reach the RAG API".to_string())?;
 
     json_body(response).await
+}
+
+#[tauri::command]
+async fn chat_job_request(
+    request: JsonApiRequest,
+    idempotency_key: String,
+    settings: State<'_, AccessSettingsStore>,
+) -> Result<ChatJobApiResponse, String> {
+    let parsed_key = uuid::Uuid::parse_str(&idempotency_key)
+        .map_err(|_| "Invalid chat submission key".to_string())?;
+    if parsed_key.get_version() != Some(uuid::Version::Random) {
+        return Err("Chat submission key must be a UUID v4".to_string());
+    }
+    match request.method.as_str() {
+        "POST" if request.path == "chat/jobs" && request.body.is_some() => {}
+        "GET" if request.path.starts_with("chat/jobs/") && request.body.is_none() => {}
+        _ => return Err("Invalid chat job request".to_string()),
+    }
+
+    let key = read_api_key().map_err(|error| error.message)?;
+    let config = settings.current().await;
+    let url = endpoint_url(&request.path, &config.api_base_url)?;
+    let client = reqwest::Client::builder()
+        .connect_timeout(std::time::Duration::from_secs(10))
+        .timeout(std::time::Duration::from_secs(30))
+        .build()
+        .map_err(|_| "Unable to initialize the API client".to_string())?;
+    let builder = match request.method.as_str() {
+        "POST" => client.post(url).json(&request.body),
+        "GET" => client.get(url),
+        _ => return Err("Invalid chat job request".to_string()),
+    };
+    let response = builder
+        .header("X-API-Key", key)
+        .header("Idempotency-Key", idempotency_key)
+        .send()
+        .await
+        .map_err(|_| "Unable to reach the RAG API".to_string())?;
+    let status = response.status().as_u16();
+    let retry_after = response
+        .headers()
+        .get(reqwest::header::RETRY_AFTER)
+        .and_then(|value| value.to_str().ok())
+        .map(str::to_string);
+    let body = response.json::<Value>().await.unwrap_or(Value::Null);
+    Ok(ChatJobApiResponse {
+        status,
+        body,
+        retry_after,
+    })
 }
 
 #[tauri::command]
@@ -583,13 +659,22 @@ async fn upload_document(
         .map_err(|_| "Upload metadata is invalid".to_string())?;
     let metadata: UploadMetadata = serde_json::from_slice(&metadata_bytes)
         .map_err(|_| "Upload metadata is invalid".to_string())?;
-    if metadata.workspace_id.is_empty()
-        || metadata.filename.is_empty()
+    if metadata.filename.is_empty()
         || metadata.filename.len() > 255
         || metadata.mime_type.is_empty()
     {
         return Err("Upload metadata is invalid".to_string());
     }
+
+    let target = match (metadata.workspace_id, metadata.document_id) {
+        (Some(workspace_id), None) if !workspace_id.is_empty() => {
+            ("POST", "documents/upload".to_string(), Some(workspace_id))
+        }
+        (None, Some(document_id)) if uuid::Uuid::parse_str(&document_id).is_ok() => {
+            ("PATCH", format!("documents/{document_id}"), None)
+        }
+        _ => return Err("Upload target is invalid".to_string()),
+    };
 
     let (client, key) = authenticated_client().await?;
     let config = settings.current().await;
@@ -597,11 +682,17 @@ async fn upload_document(
         .file_name(metadata.filename)
         .mime_str(&metadata.mime_type)
         .map_err(|_| "Upload MIME type is invalid".to_string())?;
-    let form = Form::new()
-        .text("workspace_id", metadata.workspace_id)
-        .part("file", part);
-    let response = client
-        .post(endpoint_url("documents/upload", &config.api_base_url)?)
+    let mut form = Form::new().part("file", part);
+    if let Some(workspace_id) = target.2 {
+        form = form.text("workspace_id", workspace_id);
+    }
+    let url = endpoint_url(&target.1, &config.api_base_url)?;
+    let builder = match target.0 {
+        "POST" => client.post(url),
+        "PATCH" => client.patch(url),
+        _ => return Err("Upload target is invalid".to_string()),
+    };
+    let response = builder
         .header("X-API-Key", key)
         .multipart(form)
         .send()
@@ -707,6 +798,7 @@ pub fn run() {
             validate_and_save_server_host,
             validate_saved_access,
             api_request,
+            chat_job_request,
             api_binary_request,
             upload_document,
             open_logs_folder,
@@ -730,6 +822,8 @@ mod tests {
         assert!(endpoint_url("workspace/list", base_url).is_ok());
         assert!(endpoint_url("workspace/tree", base_url).is_ok());
         assert!(endpoint_url("chat", base_url).is_ok());
+        assert!(endpoint_url("chat/jobs", base_url).is_ok());
+        assert!(endpoint_url("chat/jobs/3d712170-c022-41fe-b9e4-87ccfb35559a", base_url,).is_ok());
         assert!(endpoint_url(
             "documents/3d712170-c022-41fe-b9e4-87ccfb35559a/pdf",
             base_url,
@@ -782,6 +876,8 @@ mod tests {
         )
         .is_err());
         assert!(endpoint_url("workspace/../chat", base_url).is_err());
+        assert!(endpoint_url("chat/stream", base_url).is_err());
+        assert!(endpoint_url("chat/jobs?unexpected=value", base_url).is_err());
     }
 
     #[test]
