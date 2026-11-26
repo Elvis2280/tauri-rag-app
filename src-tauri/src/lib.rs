@@ -226,6 +226,8 @@ fn endpoint_url(path: &str, api_base_url: &str) -> Result<reqwest::Url, String> 
     }
 
     let allowed = match route {
+        "history" => valid_history_list_query(query),
+        "ollama/status" | "ollama/preferences" => query.is_empty(),
         "workspace/list" | "workspace/tree" | "workspace" | "documents/upload" | "chat" => {
             query.is_empty()
         }
@@ -237,6 +239,16 @@ fn endpoint_url(path: &str, api_base_url: &str) -> Result<reqwest::Url, String> 
         value if value.starts_with("documents/") && value.ends_with("/retry") => {
             let parts: Vec<&str> = value.split('/').collect();
             parts.len() == 3 && parts[2] == "retry" && uuid::Uuid::parse_str(parts[1]).is_ok()
+        }
+        value
+            if value.starts_with("documents/")
+                && (value.ends_with("/cancel") || value.ends_with("/status")) =>
+        {
+            let parts: Vec<&str> = value.split('/').collect();
+            query.is_empty()
+                && parts.len() == 3
+                && matches!(parts[2], "cancel" | "status")
+                && uuid::Uuid::parse_str(parts[1]).is_ok()
         }
         value if value.starts_with("workspace/") => {
             let parts: Vec<&str> = value.split('/').collect();
@@ -261,8 +273,50 @@ fn endpoint_url(path: &str, api_base_url: &str) -> Result<reqwest::Url, String> 
         return Err("API endpoint is not allowed".to_string());
     }
 
-    reqwest::Url::parse(&format!("{api_base_url}/{route}?{query}"))
-        .map_err(|_| "Invalid configured API address".to_string())
+    let base_url = if route.starts_with("ollama/") {
+        api_base_url.strip_suffix("/api/v1").unwrap_or(api_base_url)
+    } else {
+        api_base_url
+    };
+    let url = if query.is_empty() {
+        format!("{base_url}/{route}")
+    } else {
+        format!("{base_url}/{route}?{query}")
+    };
+    reqwest::Url::parse(&url).map_err(|_| "Invalid configured API address".to_string())
+}
+
+fn validate_ollama_method(method: &str, path: &str, has_body: bool) -> Result<(), String> {
+    let route = path.split_once('?').map_or(path, |(route, _)| route);
+    if !route.starts_with("ollama/") {
+        return Ok(());
+    }
+
+    match (route, method, has_body) {
+        ("ollama/status", "GET", false)
+        | ("ollama/preferences", "GET", false)
+        | ("ollama/preferences", "PATCH", true) => Ok(()),
+        _ => Err("Ollama API request is not allowed".to_string()),
+    }
+}
+
+fn validate_document_method(method: &str, path: &str, has_body: bool) -> Result<(), String> {
+    let route = path.split_once('?').map_or(path, |(route, _)| route);
+    let parts: Vec<&str> = route.split('/').collect();
+    if parts.len() != 3 || parts[0] != "documents" {
+        return Ok(());
+    }
+
+    match parts[2] {
+        "cancel" if uuid::Uuid::parse_str(parts[1]).is_ok() && method == "POST" && !has_body => {
+            Ok(())
+        }
+        "status" if uuid::Uuid::parse_str(parts[1]).is_ok() && method == "GET" && !has_body => {
+            Ok(())
+        }
+        "cancel" | "status" => Err("Document API request is not allowed".to_string()),
+        _ => Ok(()),
+    }
 }
 
 fn valid_history_query(query: &str) -> bool {
@@ -274,6 +328,37 @@ fn valid_history_query(query: &str) -> bool {
             _ => false,
         }
     })
+}
+
+fn valid_history_list_query(query: &str) -> bool {
+    if query.is_empty() {
+        return true;
+    }
+
+    let mut seen = HashMap::new();
+    for pair in query.split('&') {
+        let Some((key, value)) = pair.split_once('=') else {
+            return false;
+        };
+        if seen.insert(key, ()).is_some() {
+            return false;
+        }
+
+        let valid = match key {
+            "sort" => matches!(value, "oldest" | "newest"),
+            "status" => matches!(value, "active" | "complete"),
+            "workspace" | "cursor" => uuid::Uuid::parse_str(value).is_ok(),
+            "limit" => value
+                .parse::<u16>()
+                .is_ok_and(|limit| (1..=200).contains(&limit)),
+            _ => false,
+        };
+        if !valid {
+            return false;
+        }
+    }
+
+    true
 }
 
 fn validate_pdf_response(content_type: Option<&str>, bytes: &[u8]) -> Result<(), String> {
@@ -487,6 +572,8 @@ async fn api_request(
     request: JsonApiRequest,
     settings: State<'_, AccessSettingsStore>,
 ) -> Result<ApiResponse, String> {
+    validate_ollama_method(&request.method, &request.path, request.body.is_some())?;
+    validate_document_method(&request.method, &request.path, request.body.is_some())?;
     let (client, key) = authenticated_client().await?;
     let config = settings.current().await;
     let url = endpoint_url(&request.path, &config.api_base_url)?;
@@ -573,6 +660,16 @@ async fn api_binary_request(
             None,
             "request",
             "Unsupported binary API request",
+        ));
+    }
+    if !matches!(
+        request.path.rsplit('/').next(),
+        Some("pdf" | "markdown" | "images")
+    ) {
+        return Err(binary_api_error(
+            None,
+            "request",
+            "Binary API endpoint is not allowed",
         ));
     }
 
@@ -733,7 +830,7 @@ async fn watch_document(
                 };
                 terminal = matches!(
                     payload.get("status").and_then(Value::as_str),
-                    Some("completed" | "failed")
+                    Some("completed" | "failed" | "cancelled")
                 );
                 let _ = channel.send(ProgressEvent {
                     payload: Some(payload),
@@ -813,7 +910,8 @@ pub fn run() {
 mod tests {
     use super::{
         api_validation_error, binary_api_error, binary_error_message, endpoint_url,
-        validate_image_response, validate_markdown_response, validate_pdf_response,
+        validate_document_method, validate_image_response, validate_markdown_response,
+        validate_ollama_method, validate_pdf_response,
     };
 
     #[test]
@@ -821,6 +919,15 @@ mod tests {
         let base_url = "http://localhost:8080/api/v1";
         assert!(endpoint_url("workspace/list", base_url).is_ok());
         assert!(endpoint_url("workspace/tree", base_url).is_ok());
+        assert!(endpoint_url("history", base_url).is_ok());
+        assert!(endpoint_url("ollama/status", base_url).is_ok());
+        assert!(endpoint_url("ollama/preferences", base_url).is_ok());
+        assert!(endpoint_url("history?sort=oldest&status=active&limit=50", base_url,).is_ok());
+        assert!(endpoint_url(
+            "history?sort=newest&status=complete&limit=200&workspace=3d712170-c022-41fe-b9e4-87ccfb35559a&cursor=3d712170-c022-41fe-b9e4-87ccfb35559a",
+            base_url,
+        )
+        .is_ok());
         assert!(endpoint_url("chat", base_url).is_ok());
         assert!(endpoint_url("chat/jobs", base_url).is_ok());
         assert!(endpoint_url("chat/jobs/3d712170-c022-41fe-b9e4-87ccfb35559a", base_url,).is_ok());
@@ -839,6 +946,46 @@ mod tests {
             base_url,
         )
         .is_ok());
+        assert!(endpoint_url(
+            "documents/3d712170-c022-41fe-b9e4-87ccfb35559a/cancel",
+            base_url,
+        )
+        .is_ok());
+        assert!(endpoint_url(
+            "documents/3d712170-c022-41fe-b9e4-87ccfb35559a/status",
+            base_url,
+        )
+        .is_ok());
+        assert!(validate_document_method(
+            "POST",
+            "documents/3d712170-c022-41fe-b9e4-87ccfb35559a/cancel",
+            false,
+        )
+        .is_ok());
+        assert!(validate_document_method(
+            "GET",
+            "documents/3d712170-c022-41fe-b9e4-87ccfb35559a/status",
+            false,
+        )
+        .is_ok());
+        assert!(validate_document_method(
+            "GET",
+            "documents/3d712170-c022-41fe-b9e4-87ccfb35559a/cancel",
+            false,
+        )
+        .is_err());
+        assert!(validate_document_method(
+            "POST",
+            "documents/3d712170-c022-41fe-b9e4-87ccfb35559a/cancel",
+            true,
+        )
+        .is_err());
+        assert!(validate_document_method(
+            "POST",
+            "documents/3d712170-c022-41fe-b9e4-87ccfb35559a/status",
+            false,
+        )
+        .is_err());
     }
 
     #[test]
@@ -857,6 +1004,33 @@ mod tests {
     }
 
     #[test]
+    fn ollama_endpoints_use_server_root_and_allow_only_expected_methods() {
+        // 1. ARRANGE
+        let base_url = "https://rag.example.com:8443/api/v1";
+
+        // 2. ACT
+        let status_url = endpoint_url("ollama/status", base_url).expect("status path is allowed");
+        let preferences_url =
+            endpoint_url("ollama/preferences", base_url).expect("preferences path is allowed");
+
+        // 3. ASSERT
+        assert_eq!(
+            status_url.as_str(),
+            "https://rag.example.com:8443/ollama/status"
+        );
+        assert_eq!(
+            preferences_url.as_str(),
+            "https://rag.example.com:8443/ollama/preferences"
+        );
+        assert!(validate_ollama_method("GET", "ollama/status", false).is_ok());
+        assert!(validate_ollama_method("GET", "ollama/preferences", false).is_ok());
+        assert!(validate_ollama_method("PATCH", "ollama/preferences", true).is_ok());
+        assert!(validate_ollama_method("POST", "ollama/preferences", true).is_err());
+        assert!(validate_ollama_method("PATCH", "ollama/status", true).is_err());
+        assert!(validate_ollama_method("GET", "ollama/status", true).is_err());
+    }
+
+    #[test]
     fn endpoint_allowlist_rejects_absolute_and_unknown_routes() {
         let base_url = "http://localhost:8080/api/v1";
         assert!(endpoint_url("https://example.com/chat", base_url).is_err());
@@ -865,6 +1039,8 @@ mod tests {
         assert!(endpoint_url("documents/not-a-uuid/pdf", base_url).is_err());
         assert!(endpoint_url("documents/not-a-uuid/markdown", base_url).is_err());
         assert!(endpoint_url("documents/not-a-uuid/images", base_url).is_err());
+        assert!(endpoint_url("documents/not-a-uuid/cancel", base_url).is_err());
+        assert!(endpoint_url("documents/not-a-uuid/status", base_url).is_err());
         assert!(endpoint_url(
             "documents/3d712170-c022-41fe-b9e4-87ccfb35559a/image",
             base_url,
@@ -878,6 +1054,14 @@ mod tests {
         assert!(endpoint_url("workspace/../chat", base_url).is_err());
         assert!(endpoint_url("chat/stream", base_url).is_err());
         assert!(endpoint_url("chat/jobs?unexpected=value", base_url).is_err());
+        assert!(endpoint_url("history?sort=random", base_url).is_err());
+        assert!(endpoint_url("history?status=failed", base_url).is_err());
+        assert!(endpoint_url("history?limit=0", base_url).is_err());
+        assert!(endpoint_url("history?limit=201", base_url).is_err());
+        assert!(endpoint_url("history?workspace=not-a-uuid", base_url).is_err());
+        assert!(endpoint_url("history?cursor=not-a-uuid", base_url).is_err());
+        assert!(endpoint_url("history?limit=50&limit=100", base_url).is_err());
+        assert!(endpoint_url("history?unknown=value", base_url).is_err());
     }
 
     #[test]

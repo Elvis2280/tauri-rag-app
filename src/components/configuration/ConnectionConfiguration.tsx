@@ -35,6 +35,7 @@ type ConnectionConfigurationProps = {
   required: boolean;
   serverHost: string;
   statusError?: string | null;
+  disabled?: boolean;
   onBusyChange: (busy: boolean) => void;
   onCancelRequired: () => void;
   onRequestClose: () => void;
@@ -52,6 +53,7 @@ export default function ConnectionConfiguration({
   required,
   serverHost,
   statusError,
+  disabled = false,
   onBusyChange,
   onCancelRequired,
   onRequestClose,
@@ -76,6 +78,7 @@ export default function ConnectionConfiguration({
     resolver: yupResolver(apiAccessSchema),
     defaultValues: { apiKey: "", serverHost },
   });
+  const controlsDisabled = disabled || saving !== null;
 
   useEffect(() => {
     onBusyChange(saving !== null);
@@ -188,7 +191,7 @@ export default function ConnectionConfiguration({
                 type="button"
                 variant="outline"
                 size="sm"
-                disabled={editing !== null || saving !== null}
+                disabled={editing !== null || controlsDisabled}
                 aria-label="Update API key"
                 onClick={() => startEditing("apiKey")}
               >
@@ -205,7 +208,7 @@ export default function ConnectionConfiguration({
               autoComplete="new-password"
               aria-invalid={Boolean(errors.apiKey)}
               aria-describedby={errors.apiKey ? "api-key-error" : undefined}
-              disabled={saving !== null}
+              disabled={controlsDisabled}
               className="flex h-10 w-full rounded border border-input bg-background px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
               {...register("apiKey")}
             />
@@ -226,10 +229,10 @@ export default function ConnectionConfiguration({
           )}
           {!required && editing === "apiKey" && (
             <div className="flex justify-end gap-2">
-              <Button type="button" variant="ghost" size="sm" disabled={saving !== null} onClick={cancelEditing}>
+              <Button type="button" variant="ghost" size="sm" disabled={controlsDisabled} onClick={cancelEditing}>
                 {CONFIGURATION_LABELS.cancel}
               </Button>
-              <Button type="button" size="sm" disabled={saving !== null} onClick={() => void saveField("apiKey")}>
+              <Button type="button" size="sm" disabled={controlsDisabled} onClick={() => void saveField("apiKey")}>
                 {saving === "apiKey"
                   ? CONFIGURATION_LABELS.saving
                   : CONFIGURATION_LABELS.save}
@@ -253,7 +256,7 @@ export default function ConnectionConfiguration({
                 type="button"
                 variant="outline"
                 size="sm"
-                disabled={editing !== null || saving !== null}
+                disabled={editing !== null || controlsDisabled}
                 aria-label="Update Server Host"
                 onClick={() => startEditing("serverHost")}
               >
@@ -272,7 +275,7 @@ export default function ConnectionConfiguration({
               autoComplete="url"
               aria-invalid={Boolean(errors.serverHost)}
               aria-describedby={errors.serverHost ? "server-host-error" : undefined}
-              disabled={saving !== null}
+              disabled={controlsDisabled}
               className="flex h-10 w-full rounded border border-input bg-background px-3 py-2 font-mono text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
               {...register("serverHost")}
             />
@@ -293,10 +296,10 @@ export default function ConnectionConfiguration({
           )}
           {!required && editing === "serverHost" && (
             <div className="flex justify-end gap-2">
-              <Button type="button" variant="ghost" size="sm" disabled={saving !== null} onClick={cancelEditing}>
+              <Button type="button" variant="ghost" size="sm" disabled={controlsDisabled} onClick={cancelEditing}>
                 {CONFIGURATION_LABELS.cancel}
               </Button>
-              <Button type="button" size="sm" disabled={saving !== null} onClick={() => void saveField("serverHost")}>
+              <Button type="button" size="sm" disabled={controlsDisabled} onClick={() => void saveField("serverHost")}>
                 {saving === "serverHost"
                   ? CONFIGURATION_LABELS.saving
                   : CONFIGURATION_LABELS.save}

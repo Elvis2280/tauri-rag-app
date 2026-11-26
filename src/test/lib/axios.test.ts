@@ -44,6 +44,55 @@ describe('native API client', () => {
     });
   });
 
+  it('sends JSON PATCH requests through the native API command', async () => {
+    // 1. ARRANGE
+    const update = { ocr: faker.system.fileName() };
+    const responseBody = { ...update, editable_roles: ['ocr'] };
+    invokeMock.mockResolvedValueOnce({ status: 200, body: responseBody });
+
+    // 2. ACT
+    const response = await apiRag.patch<typeof responseBody>(
+      '/ollama/preferences',
+      update,
+    );
+
+    // 3. ASSERT
+    expect(response.data).toEqual(responseBody);
+    expect(invokeMock).toHaveBeenCalledWith('api_request', {
+      request: {
+        method: 'PATCH',
+        path: 'ollama/preferences',
+        body: update,
+      },
+    });
+  });
+
+  it('keeps multipart document replacement on the upload command', async () => {
+    // 1. ARRANGE
+    const documentId = faker.string.uuid();
+    const file = new File([faker.lorem.sentence()], faker.system.fileName(), {
+      type: 'application/pdf',
+    });
+    const formData = new FormData();
+    formData.set('file', file);
+    const responseBody = { document_id: documentId };
+    invokeMock.mockResolvedValueOnce({ status: 200, body: responseBody });
+
+    // 2. ACT
+    const response = await apiRag.patch<typeof responseBody>(
+      `/documents/${documentId}`,
+      formData,
+    );
+
+    // 3. ASSERT
+    expect(response.data).toEqual(responseBody);
+    expect(invokeMock).toHaveBeenCalledWith(
+      'upload_document',
+      expect.any(Uint8Array),
+      { headers: { 'x-upload-metadata': expect.any(String) } },
+    );
+  });
+
   it('sends chat job requests through the native command with the idempotency key', async () => {
     // 1. ARRANGE
     const key = faker.string.uuid();

@@ -9,7 +9,6 @@ import {
 import { Button } from '../ui/button';
 import { CurrentPageType } from '@/types/GlobalTypes';
 import { useLocation, useNavigate, Outlet } from 'react-router';
-import { Toaster } from '@/components/ui/sonner';
 import { useHistoryWebsocket } from '@/hooks/useHistoryWebsocket';
 import { useMemo } from 'react';
 import { TooltipProvider } from '../ui/tooltip';
@@ -87,7 +86,6 @@ export default function Layout({
           {interactive ? <Outlet /> : null}
         </TooltipProvider>
       </main>
-      <Toaster />
     </div>
   );
 }

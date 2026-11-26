@@ -1,14 +1,18 @@
 import { faker } from "@faker-js/faker";
-import { render, screen } from "@testing-library/react";
+import type { ReactNode } from "react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { render as renderUi, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import ConfigurationModal from "@/components/configuration/ConfigurationModal";
 import { API_ACCESS_MASK } from "@/constants/apiAccess";
 import { CONFIGURATION_LABELS } from "@/constants/configuration";
+import { OLLAMA_ENDPOINTS } from "@/constants/ollama";
 
-const { openLogsFolderMock, toastErrorMock } = vi.hoisted(() => ({
+const { openLogsFolderMock, toastErrorMock, apiGetMock } = vi.hoisted(() => ({
   openLogsFolderMock: vi.fn(),
   toastErrorMock: vi.fn(),
+  apiGetMock: vi.fn(),
 }));
 
 vi.mock("@/lib/errorLogging", () => ({
@@ -17,6 +21,20 @@ vi.mock("@/lib/errorLogging", () => ({
 vi.mock("sonner", () => ({
   toast: { error: toastErrorMock },
 }));
+vi.mock("@/lib/axios", () => ({
+  default: { get: apiGetMock, patch: vi.fn() },
+}));
+
+function render(node: ReactNode) {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  return renderUi(node, {
+    wrapper: ({ children }) => (
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    ),
+  });
+}
 
 function buildProps() {
   return {
@@ -34,6 +52,11 @@ function buildProps() {
 describe("ConfigurationModal", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    apiGetMock.mockImplementation(async (path: string) => ({
+      data: path.includes("/status")
+        ? { is_reachable: true, available_models: [], models: [] }
+        : { editable_roles: [] },
+    }));
   });
 
   it("shows a fixed masked key and the current host without exposing a secret", () => {
@@ -68,6 +91,38 @@ describe("ConfigurationModal", () => {
       CONFIGURATION_LABELS.llmModelsCategory,
       CONFIGURATION_LABELS.logsCategory,
     ]);
+  });
+
+  it("keeps Configuration open when a model is selected", async () => {
+    // 1. ARRANGE
+    const user = userEvent.setup();
+    const props = buildProps();
+    const currentModel = `${faker.word.noun()}:${faker.string.alphanumeric(4)}`;
+    const nextModel = `${faker.word.noun()}:${faker.string.alphanumeric(4)}`;
+    apiGetMock.mockImplementation(async (path: string) => ({
+      data:
+        path === OLLAMA_ENDPOINTS.status
+          ? {
+              is_reachable: true,
+              available_models: [currentModel, nextModel],
+              models: [
+                { name: currentModel, eligible_roles: ["ocr"] },
+                { name: nextModel, eligible_roles: ["ocr"] },
+              ],
+            }
+          : { ocr: currentModel, editable_roles: ["ocr"] },
+    }));
+    render(<ConfigurationModal {...props} />);
+    const modelSelect = await screen.findByRole("combobox", { name: "OCR" });
+
+    // 2. ACT
+    await user.selectOptions(modelSelect, nextModel);
+
+    // 3. ASSERT
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    expect(modelSelect).toHaveValue(nextModel);
+    expect(props.onOpenChange).not.toHaveBeenCalled();
+    expect(apiGetMock).toHaveBeenCalledTimes(2);
   });
 
   it("shows only connection settings during required first-run setup", () => {

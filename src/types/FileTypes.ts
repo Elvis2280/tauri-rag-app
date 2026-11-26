@@ -1,5 +1,6 @@
 export const FILE_STATUS = {
   FILE_UPLOADED: "file_uploaded",
+  FILE_PROCESSING: "file_processing",
   RETRY_QUEUED: "retry_queued",
   RETRY_RUNNING: "retry_running",
   FILE_CONVERSION_STARTED: "file_conversion_started",
@@ -8,8 +9,12 @@ export const FILE_STATUS = {
   OCR_FINISHED: "ocr_finished",
   TRANSLATION_AND_FORMATTING_STARTED: "translation_and_formatting_started",
   TRANSLATION_AND_FORMATTING_FINISHED: "translation_and_formatting_finished",
+  FILE_PROCESS_FINISHED: "file_process_finished",
+  INDEXING: "indexing",
   COMPLETED: "completed",
   FAILED: "failed",
+  CANCELLING: "cancelling",
+  CANCELLED: "cancelled",
 } as const;
 
 export type statusFileType = (typeof FILE_STATUS)[keyof typeof FILE_STATUS];
@@ -22,6 +27,7 @@ export type WebSocketProgressMessage = {
   stage: string;
   message: string;
   file_id: string;
+  document_id?: string;
   page_number: number | null;
   total_pages: number | null;
   step_total: number | null;
@@ -33,6 +39,7 @@ export type WebSocketProgressMessage = {
 
 export type HistoryEntry = {
   file_id: string;
+  workspaceId?: string;
   originalFilename: string | null;
   workspaceName: string | null;
   message: string | null;

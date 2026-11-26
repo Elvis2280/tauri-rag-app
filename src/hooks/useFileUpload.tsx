@@ -6,6 +6,7 @@ import apiRag from "@/lib/axios";
 import { DOCUMENT_ENDPOINTS } from "@/lib/api/endpoints";
 import { extractApiErrorMessage } from "@/lib/api/errors";
 import { workspaceKeys } from "@/hooks/useWorkspace";
+import { historyKeys } from "@/hooks/useHistoryList";
 import { useHistory } from "@/context/HistoryContext";
 import { restartDocumentWatch } from "@/hooks/useHistoryWebsocket";
 import type { FileUploadType } from "@/types/FileTypes";
@@ -83,6 +84,7 @@ export default function useFileUpload(): UseFileUploadResult {
       if (successes.length === 0) return;
 
       void queryClient.invalidateQueries({ queryKey: workspaceKeys.tree() });
+      void queryClient.invalidateQueries({ queryKey: historyKeys.lists() });
       successes.forEach(({ fileId, response }) => {
         if (replacements[fileId]) restartDocumentWatch(response.document_id);
         useHistory.getState().startReplacement(response, workspaceName);

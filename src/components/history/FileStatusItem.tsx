@@ -8,6 +8,7 @@ import {
 } from '@/components/ui/item';
 import { Badge } from '@/components/ui/badge';
 import {
+  HISTORY_RETRY_MESSAGES,
   MISSING_PAGE_LABEL,
   UNKNOWN_FILE_LABEL,
   UNKNOWN_WORKSPACE_LABEL,
@@ -16,8 +17,9 @@ import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/ui/tooltip';
 import { RotateCw } from 'lucide-react';
+import CancelDocumentButton from '@/components/history/CancelDocumentButton';
 import { useRetryDocument } from '@/hooks/useDocument';
-import { useState } from 'react';
+import { memo, useState } from 'react';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import apiRag from '@/lib/axios';
 import { DOCUMENT_ENDPOINTS } from '@/lib/api/endpoints';
@@ -53,9 +55,20 @@ function getStatusColor(status: statusFileType): string {
   return 'bg-yellow-500';
 }
 
-function getCardTint(status: statusFileType): string {
-  if (status === FILE_STATUS.FAILED) return 'bg-destructive/15';
-  return '';
+function getRetryMessage(
+  status: statusFileType,
+  message: string | null,
+  isSubmitting: boolean,
+): string | null {
+  if (status === FILE_STATUS.RETRY_QUEUED) {
+    return message || HISTORY_RETRY_MESSAGES.queued;
+  }
+  if (status === FILE_STATUS.RETRY_RUNNING) {
+    return message || HISTORY_RETRY_MESSAGES.running;
+  }
+  return isSubmitting && status === FILE_STATUS.FAILED
+    ? HISTORY_RETRY_MESSAGES.pending
+    : null;
 }
 
 function getProgressPercentage(
@@ -75,7 +88,7 @@ function getProgressPercentage(
   return Math.min(100, Math.max(0, (step / stepTotal) * 100));
 }
 
-export default function FileStatusItem({
+function FileStatusItem({
   file_id,
   message,
   originalFilename,
@@ -87,18 +100,24 @@ export default function FileStatusItem({
   stepTotal,
 }: FileStatusItemProps) {
   const { retryDocument, isPending, pendingDocumentId } = useRetryDocument();
-  const isRetrying = isPending && pendingDocumentId === file_id;
+  const isSubmitting = isPending && pendingDocumentId === file_id;
+  const retryMessage = getRetryMessage(status, message, isSubmitting);
+  const isFailed = status === FILE_STATUS.FAILED;
+  const indicatorStatus = isFailed && isSubmitting ? FILE_STATUS.RETRY_QUEUED : status;
   const [historyOpen, setHistoryOpen] = useState(false);
   const subtitle = `Page: ${status === FILE_STATUS.COMPLETED ? totalPages : (pageNumber ?? MISSING_PAGE_LABEL)} / ${totalPages ?? MISSING_PAGE_LABEL} · ${message ?? MISSING_PAGE_LABEL} · Status: ${status}`;
 
   const progress = getProgressPercentage(step, stepTotal);
-  const showProgress = progress !== null && status !== FILE_STATUS.FAILED;
+  const showProgress = progress !== null && !isFailed;
 
   return (
     <Item
       variant="outline"
       size="sm"
-      className={cn('relative overflow-hidden rounded', getCardTint(status))}
+      className={cn(
+        'relative overflow-hidden rounded',
+        isFailed && !isSubmitting && 'bg-destructive/15',
+      )}
     >
       {showProgress && (
         <div
@@ -112,7 +131,7 @@ export default function FileStatusItem({
           style={{ width: `${progress}%` }}
         />
       )}
-      <ItemContent className="relative z-10 cursor-default overflow-hidden">
+      <ItemContent className="relative z-10 min-w-0 cursor-default overflow-hidden">
         <div
           className="flex min-w-0 flex-col items-start gap-1"
           title={file_id}
@@ -126,17 +145,27 @@ export default function FileStatusItem({
             </span>
           </ItemTitle>
         </div>
-        <p className="text-xs text-muted-foreground truncate">{subtitle}</p>
+        {!retryMessage && (
+          <p className="truncate text-xs text-muted-foreground">{subtitle}</p>
+        )}
       </ItemContent>
-      <ItemActions className="relative z-10">
+      {retryMessage && (
+        <p
+          role="status"
+          className="relative z-10 min-w-0 flex-2 wrap-anywhere text-center text-xs text-muted-foreground"
+        >
+          {retryMessage}
+        </p>
+      )}
+      <ItemActions className="relative z-10 shrink-0">
         <Button type="button" size="icon" variant="ghost" aria-label="Toggle file processing history" onClick={() => setHistoryOpen((open) => !open)}>
           {historyOpen ? <ChevronUp /> : <ChevronDown />}
         </Button>
-        {status === FILE_STATUS.FAILED && (
+        {isFailed && (
           <TooltipProvider>
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button type="button" size="icon" variant="ghost" aria-label="Retry this file process" disabled={isRetrying} onClick={() => void retryDocument(file_id)}>
+              <Button type="button" size="icon" variant="ghost" aria-label="Retry this file process" disabled={isSubmitting} onClick={() => void retryDocument(file_id)}>
                 <RotateCw aria-hidden="true" />
               </Button>
             </TooltipTrigger>
@@ -144,9 +173,17 @@ export default function FileStatusItem({
           </Tooltip>
           </TooltipProvider>
         )}
-        <span className={cn('h-2 w-2 rounded-full', getStatusColor(status))} />
+        {status !== FILE_STATUS.COMPLETED &&
+          status !== FILE_STATUS.FAILED &&
+          status !== FILE_STATUS.CANCELLING &&
+          status !== FILE_STATUS.CANCELLED && (
+            <CancelDocumentButton documentId={file_id} filename={originalFilename} />
+          )}
+        <span className={cn('h-2 w-2 rounded-full', getStatusColor(indicatorStatus))} />
       </ItemActions>
       {historyOpen && <HistoryEvents fileId={file_id} />}
     </Item>
   );
 }
+
+export default memo(FileStatusItem);

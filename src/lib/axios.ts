@@ -45,7 +45,7 @@ type ApiClient = {
     idempotencyKey: string,
     body?: unknown,
   ): Promise<{ status: number; data: T; retryAfter: string | null }>;
-  patch<T>(path: string, body: FormData): Promise<{ data: T }>;
+  patch<T>(path: string, body: unknown): Promise<{ data: T }>;
 };
 
 function hasMessage(value: object): value is NativeCommandError {
@@ -249,12 +249,15 @@ export const apiRag: ApiClient = {
     return request<T>('POST', path, body);
   },
   chatJob: requestChatJob,
-  patch: <T>(path: string, body: FormData) => {
-    const match = path.match(/^\/?documents\/([0-9a-f-]{36})$/i);
-    if (!match || !body.has('file')) {
-      throw new Error('Document replacement request is invalid');
+  patch: <T>(path: string, body: unknown) => {
+    if (body instanceof FormData) {
+      const match = path.match(/^\/?documents\/([0-9a-f-]{36})$/i);
+      if (!match || !body.has('file')) {
+        throw new Error('Document replacement request is invalid');
+      }
+      return uploadFile<T>(path, body, match[1]);
     }
-    return uploadFile<T>(path, body, match[1]);
+    return request<T>('PATCH', path, body);
   },
 };
 

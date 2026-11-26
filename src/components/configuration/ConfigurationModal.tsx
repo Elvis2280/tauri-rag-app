@@ -38,8 +38,21 @@ export default function ConfigurationModal({
   onUpdateServerHost,
   onValidateAndClose,
 }: ConfigurationModalProps) {
-  const [busy, setBusy] = useState(false);
+  const [connectionBusy, setConnectionBusy] = useState(false);
+  const [modelsBusy, setModelsBusy] = useState(false);
+  const [connectionRevision, setConnectionRevision] = useState(0);
   const [closing, setClosing] = useState(false);
+  const busy = connectionBusy || modelsBusy;
+
+  const updateApiKey = async (apiKey: string) => {
+    await onUpdateApiKey(apiKey);
+    setConnectionRevision((revision) => revision + 1);
+  };
+
+  const updateServerHost = async (host: string) => {
+    await onUpdateServerHost(host);
+    setConnectionRevision((revision) => revision + 1);
+  };
 
   const closeModal = () => {
     if (busy || closing) return;
@@ -80,16 +93,22 @@ export default function ConfigurationModal({
             required={required}
             serverHost={serverHost}
             statusError={statusError}
-            onBusyChange={setBusy}
+            disabled={modelsBusy}
+            onBusyChange={setConnectionBusy}
             onCancelRequired={onCancelRequired}
             onRequestClose={closeModal}
             onSetup={onSetup}
-            onUpdateApiKey={onUpdateApiKey}
-            onUpdateServerHost={onUpdateServerHost}
+            onUpdateApiKey={updateApiKey}
+            onUpdateServerHost={updateServerHost}
           />
           {!required && (
             <>
-              <LlmModelsConfiguration />
+              <LlmModelsConfiguration
+                open={open}
+                refreshKey={connectionRevision}
+                disabled={connectionBusy}
+                onSavingChange={setModelsBusy}
+              />
               <LogsConfiguration />
             </>
           )}

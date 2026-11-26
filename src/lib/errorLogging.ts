@@ -23,7 +23,7 @@ function toLogPath(path: string): string {
   const parts = pathname.split('/');
 
   if (
-    ['workspace', 'workspace/list', 'workspace/tree', 'documents/upload', 'chat'].includes(pathname)
+    ['workspace', 'workspace/list', 'workspace/tree', 'documents/upload', 'chat', 'history'].includes(pathname)
   ) {
     return `/${pathname}`;
   }
@@ -39,7 +39,7 @@ function toLogPath(path: string): string {
   if (
     parts.length === 3 &&
     parts[0] === 'documents' &&
-    ['pdf', 'markdown', 'images'].includes(parts[2] ?? '')
+    ['pdf', 'markdown', 'images', 'history', 'cancel', 'status'].includes(parts[2] ?? '')
   ) {
     return `/documents/:id/${parts[2]}`;
   }

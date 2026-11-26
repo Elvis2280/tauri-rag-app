@@ -10,9 +10,15 @@ export const DOCUMENT_ENDPOINTS = {
   replace: (documentId: string) => `/documents/${documentId}`,
   pdf: (documentId: string) => `/documents/${documentId}/pdf`,
   retry: (documentId: string) => `/documents/${documentId}/retry`,
+  cancel: (documentId: string) => `/documents/${documentId}/cancel`,
+  status: (documentId: string) => `/documents/${documentId}/status`,
   history: (documentId: string, cursor?: string) => `/documents/${documentId}/history?limit=50${cursor ? `&cursor=${cursor}` : ""}`,
   markdown: (fileId: string) => `/documents/${fileId}/markdown`,
   image: (fileId: string) => `/documents/${fileId}/images`,
+} as const;
+
+export const HISTORY_ENDPOINTS = {
+  list: "/history",
 } as const;
 
 export const CHAT_ENDPOINTS = {

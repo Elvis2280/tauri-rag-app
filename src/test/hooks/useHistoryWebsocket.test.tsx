@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, renderHook } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import type { PropsWithChildren } from "react";
 import { faker } from "@faker-js/faker";
 import { toast } from "sonner";
 import { useHistoryWebsocket } from "@/hooks/useHistoryWebsocket";
@@ -58,13 +60,20 @@ function createFakeClient(): FakeClient {
 const WS_BASE = "native://document-status";
 
 const mockClients: FakeClient[] = [];
+const queryClient = new QueryClient({
+  defaultOptions: { queries: { retry: false } },
+});
+function wrapper({ children }: PropsWithChildren) {
+  return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
+}
 let consoleErrorSpy: ReturnType<typeof vi.spyOn>;
 let consoleWarnSpy: ReturnType<typeof vi.spyOn>;
 
 describe("useHistoryWebsocket", () => {
   beforeEach(() => {
+    queryClient.clear();
     localStorage.clear();
-    useHistory.setState({ entries: [] });
+    useHistory.setState({ entries: [], cancellations: {}, cancellationGeneration: 0 });
     mockClients.length = 0;
     vi.mocked(createWebSocketClient).mockImplementation(() => {
       const fake = createFakeClient();
@@ -89,7 +98,7 @@ describe("useHistoryWebsocket", () => {
     useHistory.setState({ entries: [active, completed] });
 
     // ACT
-    renderHook(() => useHistoryWebsocket());
+    renderHook(() => useHistoryWebsocket(), { wrapper });
 
     // ASSERT
     expect(createWebSocketClient).toHaveBeenCalledTimes(1);
@@ -108,7 +117,7 @@ describe("useHistoryWebsocket", () => {
     useHistory.setState({ entries: [first, second] });
 
     // ACT
-    renderHook(() => useHistoryWebsocket());
+    renderHook(() => useHistoryWebsocket(), { wrapper });
 
     // ASSERT
     expect(createWebSocketClient).toHaveBeenCalledTimes(2);
@@ -124,7 +133,7 @@ describe("useHistoryWebsocket", () => {
     const originalFilename = faker.system.fileName();
     const workspaceName = faker.company.name();
     useHistory.setState({ entries: [entry] });
-    renderHook(() => useHistoryWebsocket());
+    renderHook(() => useHistoryWebsocket(), { wrapper });
     const client = mockClients[0];
 
     // ACT
@@ -165,7 +174,7 @@ describe("useHistoryWebsocket", () => {
     const originalFilename = faker.system.fileName();
     const workspaceName = faker.company.name();
     useHistory.setState({ entries: [entry] });
-    renderHook(() => useHistoryWebsocket());
+    renderHook(() => useHistoryWebsocket(), { wrapper });
     const client = mockClients[0];
 
     // ACT
@@ -216,7 +225,7 @@ describe("useHistoryWebsocket", () => {
     // ARRANGE
     const entry = buildHistoryEntry();
     useHistory.setState({ entries: [entry] });
-    renderHook(() => useHistoryWebsocket());
+    renderHook(() => useHistoryWebsocket(), { wrapper });
     const client = mockClients[0];
 
     // ACT
@@ -245,8 +254,9 @@ describe("useHistoryWebsocket", () => {
   it("disconnects the client when a terminal status message is received", () => {
     // ARRANGE
     const entry = buildHistoryEntry();
+    const invalidateHistory = vi.spyOn(queryClient, "invalidateQueries");
     useHistory.setState({ entries: [entry] });
-    renderHook(() => useHistoryWebsocket());
+    renderHook(() => useHistoryWebsocket(), { wrapper });
     const client = mockClients[0];
 
     // ACT
@@ -271,13 +281,81 @@ describe("useHistoryWebsocket", () => {
     expect(useHistory.getState().entries[0].status).toBe(
       FILE_STATUS.COMPLETED,
     );
+    expect(invalidateHistory).toHaveBeenCalledWith({
+      queryKey: ["history", "list"],
+    });
+  });
+
+  it("removes a cancelled document and refreshes history and workspace data", () => {
+    // 1. ARRANGE
+    const entry = buildHistoryEntry({ status: FILE_STATUS.CANCELLING });
+    const resetHistory = vi.spyOn(queryClient, "resetQueries");
+    const invalidateQueries = vi.spyOn(queryClient, "invalidateQueries");
+    useHistory.setState({
+      entries: [entry],
+      cancellations: { [entry.file_id]: { phase: "pending", message: null } },
+    });
+    renderHook(() => useHistoryWebsocket(), { wrapper });
+    const client = mockClients[0];
+
+    // 2. ACT
+    act(() => {
+      client.__emitMessage({
+        status: FILE_STATUS.CANCELLED,
+        document_id: entry.file_id,
+        message: faker.lorem.sentence(),
+      });
+    });
+
+    // 3. ASSERT
+    expect(useHistory.getState().entries).toHaveLength(0);
+    expect(useHistory.getState().cancellations[entry.file_id]?.phase).toBe("removed");
+    expect(client.disconnect).toHaveBeenCalledTimes(1);
+    expect(resetHistory).toHaveBeenCalledWith({ queryKey: ["history", "list"] });
+    expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ["workspaces"] });
+    expect(toast.error).not.toHaveBeenCalled();
+  });
+
+  it("does not turn a cancelling document into a processing failure when its watch closes", () => {
+    // 1. ARRANGE
+    const entry = buildHistoryEntry({ status: FILE_STATUS.CANCELLING });
+    useHistory.setState({
+      entries: [entry],
+      cancellations: { [entry.file_id]: { phase: "pending", message: null } },
+    });
+    renderHook(() => useHistoryWebsocket(), { wrapper });
+    const client = mockClients[0];
+
+    // 2. ACT
+    act(() => client.__emitState("closed"));
+
+    // 3. ASSERT
+    expect(toast.error).not.toHaveBeenCalled();
+    expect(consoleErrorSpy).not.toHaveBeenCalled();
+    expect(useHistory.getState().entries[0].status).toBe(FILE_STATUS.CANCELLING);
+  });
+
+  it("disconnects a watch when its live entry is cleared", () => {
+    // ARRANGE
+    const entry = buildHistoryEntry();
+    useHistory.setState({ entries: [entry] });
+    renderHook(() => useHistoryWebsocket(), { wrapper });
+    const client = mockClients[0];
+
+    // ACT
+    act(() => {
+      useHistory.getState().removeEntry(entry.file_id);
+    });
+
+    // ASSERT
+    expect(client.disconnect).toHaveBeenCalledTimes(1);
   });
 
   it("logs the error details, shows the toast and marks the entry as failed on connection error", () => {
     // ARRANGE
     const entry = buildHistoryEntry();
     useHistory.setState({ entries: [entry] });
-    renderHook(() => useHistoryWebsocket());
+    renderHook(() => useHistoryWebsocket(), { wrapper });
     const client = mockClients[0];
 
     // ACT
@@ -306,7 +384,7 @@ describe("useHistoryWebsocket", () => {
     // ARRANGE
     const entry = buildHistoryEntry();
     useHistory.setState({ entries: [entry] });
-    renderHook(() => useHistoryWebsocket());
+    renderHook(() => useHistoryWebsocket(), { wrapper });
     const client = mockClients[0];
 
     // ACT
@@ -327,7 +405,7 @@ describe("useHistoryWebsocket", () => {
     // ARRANGE
     const entry = buildHistoryEntry();
     useHistory.setState({ entries: [entry] });
-    renderHook(() => useHistoryWebsocket());
+    renderHook(() => useHistoryWebsocket(), { wrapper });
     const client = mockClients[0];
 
     // ACT
